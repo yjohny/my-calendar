@@ -49,8 +49,8 @@ final class RecurrenceStore {
                 let recurrence: RecurrenceRule?
 
                 switch parsed {
-                case .event(_, _, _, let r): recurrence = r
-                case .allDay(_, let r): recurrence = r
+                case .event(_, _, _, let r, _): recurrence = r
+                case .allDay(_, let r, _): recurrence = r
                 default: recurrence = nil
                 }
 

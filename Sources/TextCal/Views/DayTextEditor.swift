@@ -6,6 +6,7 @@ struct DayTextEditor: View {
     @State private var text: String = ""
     @State private var isEditing = false
     @State private var eventLineInfos: [EventLineInfo] = []
+    @State private var refreshTask: Task<Void, Never>?
     @FocusState private var editorFocused: Bool
 
     private var hasContent: Bool {
@@ -68,9 +69,12 @@ struct DayTextEditor: View {
     private func refreshState() {
         text = store.journalText(for: date)
         eventLineInfos = store.eventLineInfosForDate(date)
-        Task {
-            await store.refreshEvents(for: date)
-            eventLineInfos = store.eventLineInfosForDate(date)
+        refreshTask?.cancel()
+        let refreshDate = date
+        refreshTask = Task {
+            await store.refreshEvents(for: refreshDate)
+            guard !Task.isCancelled else { return }
+            eventLineInfos = store.eventLineInfosForDate(refreshDate)
         }
     }
 }

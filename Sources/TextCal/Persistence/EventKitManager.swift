@@ -104,7 +104,8 @@ actor EventKitManager {
         let dayCalendar = Calendar.current
         if isAllDay {
             event.startDate = dayCalendar.startOfDay(for: date)
-            event.endDate = dayCalendar.startOfDay(for: date)
+            // All-day events in EventKit require endDate to be the next day
+            event.endDate = dayCalendar.date(byAdding: .day, value: 1, to: event.startDate) ?? event.startDate.addingTimeInterval(86400)
         } else if let start = startTime {
             var startComps = dayCalendar.dateComponents([.year, .month, .day], from: date)
             startComps.hour = start.hour
