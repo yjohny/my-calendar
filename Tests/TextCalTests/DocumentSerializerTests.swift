@@ -38,8 +38,10 @@ struct DocumentSerializerTests {
 
     @Test("Deserialize empty string produces empty array")
     func deserializeEmpty() {
-        let result = DocumentSerializer.deserialize("")
-        #expect(result.isEmpty)
+        let (entries, exceptions, endOverrides) = DocumentSerializer.deserialize("")
+        #expect(entries.isEmpty)
+        #expect(exceptions.isEmpty)
+        #expect(endOverrides.isEmpty)
     }
 
     @Test("Deserialize single day")
@@ -50,10 +52,10 @@ struct DocumentSerializerTests {
 9:00 AM - Team standup
 Had a good day.
 """
-        let result = DocumentSerializer.deserialize(input)
-        #expect(result.count == 1)
-        #expect(result[0].rawText.contains("9:00 AM - Team standup"))
-        #expect(result[0].rawText.contains("Had a good day."))
+        let (entries, _, _) = DocumentSerializer.deserialize(input)
+        #expect(entries.count == 1)
+        #expect(entries[0].rawText.contains("9:00 AM - Team standup"))
+        #expect(entries[0].rawText.contains("Had a good day."))
     }
 
     @Test("Deserialize multiple days")
@@ -67,8 +69,8 @@ Office day.
 
 Working from home.
 """
-        let result = DocumentSerializer.deserialize(input)
-        #expect(result.count == 2)
+        let (entries, _, _) = DocumentSerializer.deserialize(input)
+        #expect(entries.count == 2)
     }
 
     @Test("Round-trip serialization preserves content")
@@ -81,7 +83,7 @@ Working from home.
         ]
 
         let serialized = DocumentSerializer.serialize(days: original)
-        let deserialized = DocumentSerializer.deserialize(serialized)
+        let (deserialized, _, _) = DocumentSerializer.deserialize(serialized)
 
         #expect(deserialized.count == 2)
 
@@ -99,6 +101,28 @@ Working from home.
         ]
         let result = DocumentSerializer.serialize(days: days)
         #expect(result == "")
+    }
+
+    @Test("Round-trip with recurrence metadata")
+    func roundTripWithMetadata() {
+        let date = makeDate(year: 2026, month: 3, day: 9)
+        let days: [Date: DayEntry] = [
+            date: DayEntry(id: date, rawText: "9:00 AM - Standup (every weekday)")
+        ]
+        let exceptions: Set<String> = ["testId|123456.0"]
+        let endOverrides: [String: Date] = ["testId2": makeDate(year: 2026, month: 4, day: 1)]
+
+        let serialized = DocumentSerializer.serialize(
+            days: days,
+            exceptions: exceptions,
+            endOverrides: endOverrides
+        )
+        let (entries, deserializedExceptions, deserializedEnds) = DocumentSerializer.deserialize(serialized)
+
+        #expect(entries.count == 1)
+        #expect(deserializedExceptions.count == 1)
+        #expect(deserializedExceptions.contains("testId|123456.0"))
+        #expect(deserializedEnds.count == 1)
     }
 
     // MARK: - Helpers

@@ -6,7 +6,7 @@ struct LineParserTests {
     @Test("Parses simple AM time event")
     func simpleAMEvent() {
         let result = LineParser.parse("9:00 AM - Team standup")
-        guard case .event(let time, let title) = result else {
+        guard case .event(let time, _, let title, _) = result else {
             Issue.record("Expected event, got \(result)")
             return
         }
@@ -18,7 +18,7 @@ struct LineParserTests {
     @Test("Parses PM time event")
     func pmEvent() {
         let result = LineParser.parse("2:00 PM - Call with client")
-        guard case .event(let time, let title) = result else {
+        guard case .event(let time, _, let title, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -30,7 +30,7 @@ struct LineParserTests {
     @Test("Parses 24-hour time event")
     func twentyFourHourEvent() {
         let result = LineParser.parse("14:30 - Meeting")
-        guard case .event(let time, let title) = result else {
+        guard case .event(let time, _, let title, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -42,7 +42,7 @@ struct LineParserTests {
     @Test("Parses time without minutes")
     func timeWithoutMinutes() {
         let result = LineParser.parse("2 PM - Lunch")
-        guard case .event(let time, let title) = result else {
+        guard case .event(let time, _, let title, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -54,7 +54,7 @@ struct LineParserTests {
     @Test("Parses lowercase am/pm")
     func lowercaseAmPm() {
         let result = LineParser.parse("10:30 am - Brunch")
-        guard case .event(let time, let title) = result else {
+        guard case .event(let time, _, let title, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -66,7 +66,7 @@ struct LineParserTests {
     @Test("Parses 12 PM correctly")
     func twelvePM() {
         let result = LineParser.parse("12:00 PM - Noon meeting")
-        guard case .event(let time, _) = result else {
+        guard case .event(let time, _, _, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -76,7 +76,7 @@ struct LineParserTests {
     @Test("Parses 12 AM correctly")
     func twelveAM() {
         let result = LineParser.parse("12:00 AM - Midnight snack")
-        guard case .event(let time, _) = result else {
+        guard case .event(let time, _, _, _) = result else {
             Issue.record("Expected event")
             return
         }
