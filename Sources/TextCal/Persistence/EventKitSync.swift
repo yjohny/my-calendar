@@ -83,7 +83,7 @@ enum EventKitSync {
             if let days = rule.daysOfTheWeek, days.count == 5 {
                 // Mon-Fri weekday rule (created as .weekly with 5 days)
                 let weekdayValues = Set(days.map { $0.dayOfTheWeek.rawValue })
-                let monToFri = Set([EKWeekday.monday.rawValue, .tuesday.rawValue, .wednesday.rawValue, .thursday.rawValue, .friday.rawValue])
+                let monToFri = Set([EKWeekday.monday.rawValue, EKWeekday.tuesday.rawValue, EKWeekday.wednesday.rawValue, EKWeekday.thursday.rawValue, EKWeekday.friday.rawValue])
                 if weekdayValues == monToFri {
                     return "(every weekday)"
                 }
