@@ -117,7 +117,7 @@ struct DateScrubber: View {
         guard totalDays > 0 else { return [] }
 
         var ticks: [MonthTick] = []
-        var current = startDate
+        let current = startDate
 
         // Find first of next month
         var comps = calendar.dateComponents([.year, .month], from: current)
