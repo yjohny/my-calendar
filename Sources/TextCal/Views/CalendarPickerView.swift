@@ -10,7 +10,7 @@ struct CalendarPickerView: View {
     var body: some View {
         NavigationView {
             List {
-                ForEach(calendars, id: \EKCalendar.calendarIdentifier) { calendar in
+                ForEach(calendars, id: \EKCalendar.calendarIdentifier) { (calendar: EKCalendar) in
                 Button {
                     selectedIdentifier = calendar.calendarIdentifier
                     dismiss()
