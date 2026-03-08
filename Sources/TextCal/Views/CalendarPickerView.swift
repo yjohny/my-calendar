@@ -25,7 +25,7 @@ struct CalendarPickerView: View {
                         Spacer()
                         if calendar.calendarIdentifier == selectedIdentifier {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(.accentColor)
+                                .foregroundStyle(Color.accentColor)
                                 .fontWeight(.medium)
                         }
                     }
