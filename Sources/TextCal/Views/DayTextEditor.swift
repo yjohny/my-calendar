@@ -17,7 +17,7 @@ struct DayTextEditor: View {
         VStack(alignment: .leading, spacing: 0) {
             if isEditing {
                 TextEditor(text: $text)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(.body, design: .rounded))
                     .scrollDisabled(true)
                     .frame(minHeight: 60)
                     .padding(.horizontal, 12)
@@ -38,11 +38,11 @@ struct DayTextEditor: View {
                     }
             } else if !hasContent {
                 Text("Add events or notes...")
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(.body, design: .rounded))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
                     .padding(.horizontal, 20)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 6)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         isEditing = true
@@ -53,7 +53,7 @@ struct DayTextEditor: View {
                     eventLineInfos: eventLineInfos
                 )
                 .padding(.horizontal, 16)
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .contentShape(Rectangle())
                 .onTapGesture {

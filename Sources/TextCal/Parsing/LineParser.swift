@@ -21,6 +21,9 @@ enum LineParser {
     /// Regex to extract an optional `[CalendarName]` prefix from a line.
     private static let calendarPrefixPattern = /^\s*\[([^\]]+)\]\s*/
 
+    /// Regex to extract an optional `[CalendarName]` suffix from a line.
+    private static let calendarSuffixPattern = /\s*\[([^\]]+)\]\s*$/
+
     /// Extract a `[CalendarName]` prefix from the line, returning the name and the remaining text.
     static func extractCalendarPrefix(_ line: String) -> (calendarName: String, remainder: String)? {
         guard let match = line.prefixMatch(of: calendarPrefixPattern) else { return nil }
@@ -30,13 +33,40 @@ enum LineParser {
         return (name, remainder)
     }
 
+    /// Extract a `[CalendarName]` suffix from the line, returning the name and the remaining text.
+    static func extractCalendarSuffix(_ line: String) -> (calendarName: String, remainder: String)? {
+        guard let match = line.firstMatch(of: calendarSuffixPattern) else { return nil }
+        let name = String(match.1).trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return nil }
+        let remainder = String(line[line.startIndex..<match.range.lowerBound])
+        return (name, remainder)
+    }
+
     /// Parse a single line into an EntryLine
     static func parse(_ line: String) -> EntryLine {
         if line.trimmingCharacters(in: .whitespaces).isEmpty {
             return .blank
         }
 
-        // Try extracting a [CalendarName] prefix, but only use it if the
+        // Try extracting a [CalendarName] suffix (new format: "9:00 AM - Title (weekly) [Work]")
+        if let suffix = extractCalendarSuffix(line) {
+            let remainder = suffix.remainder
+            if let match = parseAllDayLine(remainder) {
+                return .allDay(title: match.title, recurrence: match.recurrence, calendarName: suffix.calendarName)
+            }
+            if let match = parseEventLine(remainder) {
+                return .event(
+                    time: match.timeComponents,
+                    endTime: match.endTimeComponents,
+                    title: match.title,
+                    recurrence: match.recurrence,
+                    calendarName: suffix.calendarName
+                )
+            }
+            // Suffix didn't follow an event — fall through to normal parsing
+        }
+
+        // Legacy: try extracting a [CalendarName] prefix, but only use it if the
         // remainder parses as an event. Otherwise preserve the original line
         // so text like "[Work] had a great day" stays intact as journal.
         if let prefix = extractCalendarPrefix(line) {

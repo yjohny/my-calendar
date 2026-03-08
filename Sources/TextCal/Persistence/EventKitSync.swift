@@ -16,11 +16,11 @@ enum EventKitSync {
         }
     }
 
-    /// Render an EKEvent as a text line, prepending `[CalendarTitle]` if it's not the default calendar.
+    /// Render an EKEvent as a text line, appending `[CalendarTitle]` if it's not the default calendar.
     static func textLine(from event: EKEvent, defaultCalendarId: String?) -> String {
         let line = textLine(from: event)
         if let defaultId = defaultCalendarId, event.calendar.calendarIdentifier != defaultId {
-            return "[\(event.calendar.title)] \(line)"
+            return "\(line) [\(event.calendar.title)]"
         }
         return line
     }

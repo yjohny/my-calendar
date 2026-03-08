@@ -6,7 +6,7 @@ struct StyledTextView: View {
     var eventLineInfos: [EventLineInfo] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 5) {
             // Show EventKit events first
             ForEach(Array(eventLineInfos.enumerated()), id: \.offset) { _, info in
                 styledLine(info.text, isFromEventKit: true, calendarColor: info.calendarColor)
@@ -20,12 +20,12 @@ struct StyledTextView: View {
 
     @ViewBuilder
     private func styledLine(_ line: String, isFromEventKit: Bool, calendarColor: Color?) -> some View {
-        // Strip [CalendarName] prefix for display (we show color instead)
+        // Strip [CalendarName] suffix/prefix for display (we show color instead)
         let (displayLine, calName) = stripCalendarPrefix(line)
 
         if displayLine.trimmingCharacters(in: .whitespaces).isEmpty {
             Text(" ")
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.body, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if let match = LineParser.parseAllDayLine(displayLine) {
             allDayView(match: match, isFromEventKit: isFromEventKit, calendarColor: calendarColor, calendarName: calName)
@@ -33,18 +33,23 @@ struct StyledTextView: View {
             eventView(match: match, isFromEventKit: isFromEventKit, calendarColor: calendarColor, calendarName: calName)
         } else if displayLine.hasPrefix("  ") {
             Text(displayLine)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.body, design: .rounded))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text(displayLine)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.body, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    /// Strip `[CalendarName]` prefix from a line for display purposes
+    /// Strip `[CalendarName]` suffix or prefix from a line for display purposes
     private func stripCalendarPrefix(_ line: String) -> (line: String, calendarName: String?) {
+        // Try suffix first (new format)
+        if let result = LineParser.extractCalendarSuffix(line) {
+            return (result.remainder, result.calendarName)
+        }
+        // Fall back to prefix (legacy format)
         if let result = LineParser.extractCalendarPrefix(line) {
             return (result.remainder, result.calendarName)
         }
@@ -56,19 +61,19 @@ struct StyledTextView: View {
         let starColor = calendarColor ?? Color.orange
         let result: Text = {
             var t = Text("★ ")
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.body, design: .rounded))
                 .foregroundStyle(starColor)
             + Text(match.title)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.body, design: .rounded))
                 .fontWeight(.medium)
             if let recurrence = match.recurrence {
-                t = t + Text(" " + recurrence.rawText)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                t = t + Text("  " + recurrence.rawText)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.secondary)
             }
             if let calName = calendarName {
                 t = t + Text("  \(calName)")
-                    .font(.system(.caption2, design: .monospaced))
+                    .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(.quaternary)
             }
             return t
@@ -97,16 +102,16 @@ struct StyledTextView: View {
             }
 
             t = t + Text(match.separator + match.title)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.body, design: .rounded))
 
             if let recurrence = match.recurrence {
-                t = t + Text(" " + recurrence.rawText)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                t = t + Text("  " + recurrence.rawText)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.secondary)
             }
             if let calName = calendarName {
                 t = t + Text("  \(calName)")
-                    .font(.system(.caption2, design: .monospaced))
+                    .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(.quaternary)
             }
             return t

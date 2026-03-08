@@ -10,7 +10,7 @@ struct DaySectionView: View {
             DayTextEditor(date: date)
             Divider()
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, 14)
         }
     }
 }
