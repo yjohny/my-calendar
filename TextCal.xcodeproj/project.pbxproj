@@ -34,6 +34,9 @@
 		A10000000000000000000026 /* EventKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* EventKit.framework */; };
 		A10000000000000000000030 /* DateScrubber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000030 /* DateScrubber.swift */; };
 		A10000000000000000000031 /* DateJumpPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000031 /* DateJumpPicker.swift */; };
+		A10000000000000000000040 /* CalendarSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000040 /* CalendarSettings.swift */; };
+		A10000000000000000000041 /* CalendarPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000041 /* CalendarPickerView.swift */; };
+		A10000000000000000000042 /* CalendarButtonOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000042 /* CalendarButtonOverlay.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +69,9 @@
 		B10000000000000000000026 /* EventKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = EventKit.framework; path = System/Library/Frameworks/EventKit.framework; sourceTree = SDKROOT; };
 		B10000000000000000000030 /* DateScrubber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateScrubber.swift; sourceTree = "<group>"; };
 		B10000000000000000000031 /* DateJumpPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateJumpPicker.swift; sourceTree = "<group>"; };
+		B10000000000000000000040 /* CalendarSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSettings.swift; sourceTree = "<group>"; };
+		B10000000000000000000041 /* CalendarPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPickerView.swift; sourceTree = "<group>"; };
+		B10000000000000000000042 /* CalendarButtonOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarButtonOverlay.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -144,6 +150,7 @@
 				B10000000000000000000004 /* CalendarStore.swift */,
 				B10000000000000000000020 /* RecurrenceRule.swift */,
 				B10000000000000000000021 /* RecurrenceStore.swift */,
+				B10000000000000000000040 /* CalendarSettings.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -171,6 +178,8 @@
 				B10000000000000000000025 /* HelpButtonOverlay.swift */,
 				B10000000000000000000030 /* DateScrubber.swift */,
 				B10000000000000000000031 /* DateJumpPicker.swift */,
+				B10000000000000000000041 /* CalendarPickerView.swift */,
+				B10000000000000000000042 /* CalendarButtonOverlay.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -296,6 +305,9 @@
 				A10000000000000000000025 /* HelpButtonOverlay.swift in Sources */,
 				A10000000000000000000030 /* DateScrubber.swift in Sources */,
 				A10000000000000000000031 /* DateJumpPicker.swift in Sources */,
+				A10000000000000000000040 /* CalendarSettings.swift in Sources */,
+				A10000000000000000000041 /* CalendarPickerView.swift in Sources */,
+				A10000000000000000000042 /* CalendarButtonOverlay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
