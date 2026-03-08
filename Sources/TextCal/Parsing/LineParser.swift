@@ -8,31 +8,53 @@ struct EventLineMatch {
     let timeComponents: DateComponents
     let endTimeComponents: DateComponents?
     let recurrence: RecurrenceRule?
+    let calendarName: String?
 }
 
 struct AllDayMatch {
     let title: String
     let recurrence: RecurrenceRule?
+    let calendarName: String?
 }
 
 enum LineParser {
+    /// Regex to extract an optional `[CalendarName]` prefix from a line.
+    private static let calendarPrefixPattern = /^\s*\[([^\]]+)\]\s*/
+
+    /// Extract a `[CalendarName]` prefix from the line, returning the name and the remaining text.
+    static func extractCalendarPrefix(_ line: String) -> (calendarName: String, remainder: String)? {
+        guard let match = line.prefixMatch(of: calendarPrefixPattern) else { return nil }
+        let name = String(match.1).trimmingCharacters(in: .whitespaces)
+        let remainder = String(line[match.range.upperBound...])
+        return (name, remainder)
+    }
+
     /// Parse a single line into an EntryLine
     static func parse(_ line: String) -> EntryLine {
         if line.trimmingCharacters(in: .whitespaces).isEmpty {
             return .blank
         }
 
-        // Check all-day event first (* prefix)
-        if let match = parseAllDayLine(line) {
-            return .allDay(title: match.title, recurrence: match.recurrence)
+        // Extract optional [CalendarName] prefix before parsing
+        var calendarName: String?
+        var lineToProcess = line
+        if let prefix = extractCalendarPrefix(line) {
+            calendarName = prefix.calendarName
+            lineToProcess = prefix.remainder
         }
 
-        if let match = parseEventLine(line) {
+        // Check all-day event first (* prefix)
+        if let match = parseAllDayLine(lineToProcess) {
+            return .allDay(title: match.title, recurrence: match.recurrence, calendarName: calendarName ?? match.calendarName)
+        }
+
+        if let match = parseEventLine(lineToProcess) {
             return .event(
                 time: match.timeComponents,
                 endTime: match.endTimeComponents,
                 title: match.title,
-                recurrence: match.recurrence
+                recurrence: match.recurrence,
+                calendarName: calendarName ?? match.calendarName
             )
         }
 
@@ -53,7 +75,7 @@ enum LineParser {
 
         var title = String(match.1)
         let recurrence = extractRecurrence(from: &title)
-        return AllDayMatch(title: title, recurrence: recurrence)
+        return AllDayMatch(title: title, recurrence: recurrence, calendarName: nil)
     }
 
     /// Try to parse a line as an event line. Returns match details or nil.
@@ -89,7 +111,8 @@ enum LineParser {
                 title: title,
                 timeComponents: startComponents,
                 endTimeComponents: endComponents,
-                recurrence: recurrence
+                recurrence: recurrence,
+                calendarName: nil
             )
         }
 
@@ -117,7 +140,8 @@ enum LineParser {
             title: title,
             timeComponents: components,
             endTimeComponents: nil,
-            recurrence: recurrence
+            recurrence: recurrence,
+            calendarName: nil
         )
     }
 

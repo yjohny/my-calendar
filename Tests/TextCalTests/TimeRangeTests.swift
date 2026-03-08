@@ -45,7 +45,7 @@ struct TimeRangeTests {
     @Test("EntryLine includes end time for range events")
     func entryLineEndTime() {
         let result = LineParser.parse("9:00-10:30 AM - Review")
-        guard case .event(let time, let endTime, let title, _) = result else {
+        guard case .event(let time, let endTime, let title, _, _) = result else {
             Issue.record("Expected event, got \(result)")
             return
         }

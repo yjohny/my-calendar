@@ -1,5 +1,6 @@
 import EventKit
 import Foundation
+import SwiftUI
 
 /// Converts between our text-based event format and EventKit objects
 enum EventKitSync {
@@ -13,6 +14,20 @@ enum EventKitSync {
         } else {
             return timedLine(from: event)
         }
+    }
+
+    /// Render an EKEvent as a text line, prepending `[CalendarTitle]` if it's not the default calendar.
+    static func textLine(from event: EKEvent, defaultCalendarId: String?) -> String {
+        let line = textLine(from: event)
+        if let defaultId = defaultCalendarId, event.calendar.calendarIdentifier != defaultId {
+            return "[\(event.calendar.title)] \(line)"
+        }
+        return line
+    }
+
+    /// Extract the calendar's color as a SwiftUI Color
+    static func calendarColor(from event: EKEvent) -> Color {
+        Color(cgColor: event.calendar.cgColor)
     }
 
     private static func allDayLine(from event: EKEvent) -> String {

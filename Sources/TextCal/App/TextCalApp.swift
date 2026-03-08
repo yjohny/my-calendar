@@ -15,7 +15,8 @@ struct TextCalApp: App {
                     store.configure(
                         eventKitManager: eventKitManager,
                         fileStore: fileStore,
-                        coalescer: coalescer
+                        coalescer: coalescer,
+                        calendarSettings: CalendarSettings()
                     )
                     await store.load()
                 }
