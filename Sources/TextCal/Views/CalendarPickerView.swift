@@ -9,7 +9,8 @@ struct CalendarPickerView: View {
 
     var body: some View {
         NavigationView {
-            List(calendars, id: \.calendarIdentifier) { calendar in
+            List {
+                ForEach(calendars, id: \.calendarIdentifier) { calendar in
                 Button {
                     selectedIdentifier = calendar.calendarIdentifier
                     dismiss()
@@ -28,6 +29,7 @@ struct CalendarPickerView: View {
                                 .fontWeight(.medium)
                         }
                     }
+                }
                 }
             }
             .navigationTitle("Default Calendar")
