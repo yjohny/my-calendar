@@ -27,6 +27,7 @@ Xcode project: `TextCal.xcodeproj`
 ## Known Patterns to Watch
 - **Recurring event sync**: `syncEventsToEventKit` skips parsed events that match existing recurring occurrences (by title, time, all-day status). Non-recurring events are deleted and recreated. Be careful not to break this deduplication logic.
 - **Recurrence round-tripping**: "Every weekday" is stored in EventKit as a `.weekly` rule with 5 `daysOfTheWeek` (Mon-Fri), not as `.daily`. `EventKitSync.recurrenceText()` must detect this pattern under the `.weekly` case to render it back as `(every weekday)`.
+- **EKWeekday raw values**: When building collections of `EKWeekday.rawValue` (Int), always fully qualify each enum case (e.g., `EKWeekday.monday.rawValue, EKWeekday.tuesday.rawValue`). Swift infers shorthand like `.tuesday.rawValue` as members of `Int` rather than `EKWeekday`, causing build errors.
 - **Time validation**: `TimePatterns.parseTime()` validates hours (0-23) and minutes (0-59), returning `nil` for out-of-range values.
 - **All-day events**: EventKit requires all-day event `endDate` to be the start of the *next* day, not the same day as `startDate`.
 - **DayTextEditor refresh**: Uses a cancellable `refreshTask` to prevent stale async results from overwriting current state when the user scrolls quickly between dates.
