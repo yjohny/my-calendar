@@ -17,7 +17,7 @@ Xcode project: `TextCal.xcodeproj`
 - **Views/** — SwiftUI views. `DayTextEditor` toggles between styled display (`StyledTextView`) and edit mode (`TextEditor`). Floating buttons for Today/Help. `DateScrubber` on right edge.
 
 ## Key Patterns
-- All text uses monospaced fonts for calendar-like appearance
+- Uses rounded (SF Rounded) fonts throughout for a softer, modern feel. Monospaced is used only for time portions in event lines (e.g., `9:00 AM`) to maintain clean tabular alignment.
 - Event format: `9:00 AM - Title`, `9:00-10:30 AM - Title`, `* All Day Event`
 - Recurrence: `(daily)`, `(every weekday)`, `(every Monday)`, `(monthly 15th)`, `(yearly)`
 - Recurring events from EventKit are treated as read-only occurrences during sync — only non-recurring TextCal events are removed and recreated on edit to avoid duplication
@@ -25,6 +25,7 @@ Xcode project: `TextCal.xcodeproj`
 - **Calendar colors**: `StyledTextView` uses each event's `EKCalendar.cgColor` for the time/star accent color. Events from non-default calendars show a subtle calendar name label.
 
 ## Known Patterns to Watch
+- **Calendar name suffix vs prefix**: `LineParser.parse()` checks for a `[CalendarName]` suffix first (new format: `9:00 AM - Meeting [Work]`), then falls back to prefix (legacy: `[Work] 9:00 AM - Meeting`). `EventKitSync.textLine(from:defaultCalendarId:)` renders the suffix format. `StyledTextView.stripCalendarPrefix()` strips both formats for display. Both formats must be kept in sync across these three files.
 - **Recurring event sync**: `syncEventsToEventKit` skips parsed events that match existing recurring occurrences (by title, time, all-day status). Non-recurring events are deleted and recreated. Be careful not to break this deduplication logic.
 - **Recurrence round-tripping**: "Every weekday" is stored in EventKit as a `.weekly` rule with 5 `daysOfTheWeek` (Mon-Fri), not as `.daily`. `EventKitSync.recurrenceText()` must detect this pattern under the `.weekly` case to render it back as `(every weekday)`.
 - **EKWeekday raw values**: When building collections of `EKWeekday.rawValue` (Int), always fully qualify each enum case (e.g., `EKWeekday.monday.rawValue, EKWeekday.tuesday.rawValue`). Swift infers shorthand like `.tuesday.rawValue` as members of `Int` rather than `EKWeekday`, causing build errors.
