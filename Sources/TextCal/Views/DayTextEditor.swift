@@ -5,11 +5,11 @@ struct DayTextEditor: View {
     @Environment(CalendarStore.self) private var store
     @State private var text: String = ""
     @State private var isEditing = false
-    @State private var materializedLines: [String] = []
+    @State private var eventLines: [String] = []
     @FocusState private var editorFocused: Bool
 
     private var hasContent: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !materializedLines.isEmpty
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !eventLines.isEmpty
     }
 
     var body: some View {
@@ -23,14 +23,16 @@ struct DayTextEditor: View {
                     .focused($editorFocused)
                     .onChange(of: text) { _, newValue in
                         store.update(date: date, text: newValue)
-                        updateMaterialized()
                     }
                     .onChange(of: editorFocused) { _, focused in
                         if !focused {
                             isEditing = false
+                            refreshState()
                         }
                     }
                     .onAppear {
+                        // When entering edit mode, show the full combined text
+                        text = store.displayText(for: date)
                         editorFocused = true
                     }
             } else if !hasContent {
@@ -45,39 +47,30 @@ struct DayTextEditor: View {
                         isEditing = true
                     }
             } else {
-                StyledTextView(text: text, materializedLines: materializedLines)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 4)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        isEditing = true
-                    }
-
-                // Context menus for materialized recurring event lines
-                ForEach(materializedLines, id: \.self) { line in
-                    Color.clear
-                        .frame(height: 0)
-                        .contextMenu {
-                            Button("Skip this day") {
-                                store.skipRecurringEvent(line: line, on: date)
-                                updateMaterialized()
-                            }
-                            Button("Stop all future", role: .destructive) {
-                                store.endRecurringEvent(line: line, from: date)
-                                updateMaterialized()
-                            }
-                        }
+                StyledTextView(
+                    text: store.journalText(for: date),
+                    eventLines: eventLines
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isEditing = true
                 }
             }
         }
         .onAppear {
-            text = store.text(for: date)
-            updateMaterialized()
+            refreshState()
         }
     }
 
-    private func updateMaterialized() {
-        materializedLines = store.recurrenceStore.materializedLines(for: date)
+    private func refreshState() {
+        text = store.journalText(for: date)
+        eventLines = store.eventLinesForDate(date)
+        Task {
+            await store.refreshEvents(for: date)
+            eventLines = store.eventLinesForDate(date)
+        }
     }
 }

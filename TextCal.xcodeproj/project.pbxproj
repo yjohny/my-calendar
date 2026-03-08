@@ -25,6 +25,13 @@
 		A10000000000000000000010 /* ChangeCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* ChangeCoalescer.swift */; };
 		A10000000000000000000011 /* DateFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* DateFormatting.swift */; };
 		A10000000000000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* Assets.xcassets */; };
+		A10000000000000000000020 /* RecurrenceRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* RecurrenceRule.swift */; };
+		A10000000000000000000021 /* RecurrenceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* RecurrenceStore.swift */; };
+		A10000000000000000000022 /* EventKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* EventKitManager.swift */; };
+		A10000000000000000000023 /* EventKitSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000023 /* EventKitSync.swift */; };
+		A10000000000000000000024 /* SyntaxHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000024 /* SyntaxHelpView.swift */; };
+		A10000000000000000000025 /* HelpButtonOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* HelpButtonOverlay.swift */; };
+		A10000000000000000000026 /* EventKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* EventKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +55,13 @@
 		B10000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10000000000000000000014 /* TextCal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TextCal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000020 /* RecurrenceRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurrenceRule.swift; sourceTree = "<group>"; };
+		B10000000000000000000021 /* RecurrenceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurrenceStore.swift; sourceTree = "<group>"; };
+		B10000000000000000000022 /* EventKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitManager.swift; sourceTree = "<group>"; };
+		B10000000000000000000023 /* EventKitSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitSync.swift; sourceTree = "<group>"; };
+		B10000000000000000000024 /* SyntaxHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHelpView.swift; sourceTree = "<group>"; };
+		B10000000000000000000025 /* HelpButtonOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpButtonOverlay.swift; sourceTree = "<group>"; };
+		B10000000000000000000026 /* EventKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = EventKit.framework; path = System/Library/Frameworks/EventKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000026 /* EventKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -123,6 +138,8 @@
 				B10000000000000000000002 /* DayEntry.swift */,
 				B10000000000000000000003 /* EntryLine.swift */,
 				B10000000000000000000004 /* CalendarStore.swift */,
+				B10000000000000000000020 /* RecurrenceRule.swift */,
+				B10000000000000000000021 /* RecurrenceStore.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -146,6 +163,8 @@
 				B1000000000000000000000B /* DayTextEditor.swift */,
 				B1000000000000000000000C /* StyledTextView.swift */,
 				B1000000000000000000000D /* TodayButtonOverlay.swift */,
+				B10000000000000000000024 /* SyntaxHelpView.swift */,
+				B10000000000000000000025 /* HelpButtonOverlay.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -163,6 +182,8 @@
 			children = (
 				B1000000000000000000000F /* FileStore.swift */,
 				B10000000000000000000010 /* ChangeCoalescer.swift */,
+				B10000000000000000000022 /* EventKitManager.swift */,
+				B10000000000000000000023 /* EventKitSync.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -261,6 +282,12 @@
 				A1000000000000000000000F /* FileStore.swift in Sources */,
 				A10000000000000000000010 /* ChangeCoalescer.swift in Sources */,
 				A10000000000000000000011 /* DateFormatting.swift in Sources */,
+				A10000000000000000000020 /* RecurrenceRule.swift in Sources */,
+				A10000000000000000000021 /* RecurrenceStore.swift in Sources */,
+				A10000000000000000000022 /* EventKitManager.swift in Sources */,
+				A10000000000000000000023 /* EventKitSync.swift in Sources */,
+				A10000000000000000000024 /* SyntaxHelpView.swift in Sources */,
+				A10000000000000000000025 /* HelpButtonOverlay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

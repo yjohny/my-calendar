@@ -9,9 +9,14 @@ struct TextCalApp: App {
             CalendarDocumentView()
                 .environment(store)
                 .task {
+                    let eventKitManager = EventKitManager()
                     let fileStore = FileStore()
                     let coalescer = ChangeCoalescer()
-                    store.configure(fileStore: fileStore, coalescer: coalescer)
+                    store.configure(
+                        eventKitManager: eventKitManager,
+                        fileStore: fileStore,
+                        coalescer: coalescer
+                    )
                     await store.load()
                 }
         }

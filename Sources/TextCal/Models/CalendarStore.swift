@@ -1,138 +1,302 @@
+import EventKit
 import Foundation
 import SwiftUI
 
 @MainActor
 @Observable
 final class CalendarStore {
-    /// Sparse map: only dates with non-empty content are stored
-    private(set) var days: [Date: DayEntry] = [:]
+    /// Journal text per date (only freeform text, not events)
+    private(set) var journals: [Date: String] = [:]
 
-    /// Manages recurring events and their materialization
-    let recurrenceStore = RecurrenceStore()
+    /// Cached event lines per date (rendered from EventKit)
+    private(set) var eventLines: [Date: [String]] = [:]
 
+    /// Whether EventKit access has been granted
+    private(set) var hasCalendarAccess = false
+
+    private var eventKitManager: EventKitManager?
     private var fileStore: FileStore?
     private var coalescer: ChangeCoalescer?
 
     init() {}
 
-    /// Connect to persistence layer
-    func configure(fileStore: FileStore, coalescer: ChangeCoalescer) {
+    /// Connect to persistence layers
+    func configure(eventKitManager: EventKitManager, fileStore: FileStore, coalescer: ChangeCoalescer) {
+        self.eventKitManager = eventKitManager
         self.fileStore = fileStore
         self.coalescer = coalescer
     }
 
-    /// Get the raw user-typed text for a date, or empty string if none
-    func text(for date: Date) -> String {
-        let key = DateFormatting.normalizeToDay(date)
-        return days[key]?.rawText ?? ""
-    }
-
-    /// Get the effective text for a date: user text + materialized recurring events
-    func effectiveText(for date: Date) -> String {
-        let key = DateFormatting.normalizeToDay(date)
-        let userText = days[key]?.rawText ?? ""
-        let materializedLines = recurrenceStore.materializedLines(for: key)
-
-        if materializedLines.isEmpty {
-            return userText
+    /// Request calendar access and load initial data
+    func load() async {
+        // Request EventKit access
+        if let ekManager = eventKitManager {
+            hasCalendarAccess = await ekManager.requestAccess()
         }
 
-        let materialized = materializedLines.joined(separator: "\n")
-        if userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return materialized
-        }
+        // Load journal text from per-day files
+        if let fileStore {
+            do {
+                let allJournals = try await fileStore.loadAllJournals()
+                for (date, text) in allJournals {
+                    journals[date] = text
+                }
+            } catch {
+                // Fresh start
+            }
 
-        return materialized + "\n" + userText
+            // Migrate from legacy single-file format if needed
+            await migrateLegacyIfNeeded()
+        }
     }
 
-    /// Update the text for a date, triggering a debounced save
+    // MARK: - Reading
+
+    /// Get the combined display text for a date: event lines + journal text
+    func displayText(for date: Date) -> String {
+        let key = DateFormatting.normalizeToDay(date)
+        let events = eventLines[key] ?? []
+        let journal = journals[key] ?? ""
+
+        var parts: [String] = []
+        if !events.isEmpty {
+            parts.append(events.joined(separator: "\n"))
+        }
+        if !journal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(journal)
+        }
+        return parts.joined(separator: "\n")
+    }
+
+    /// Get just the journal text for a date
+    func journalText(for date: Date) -> String {
+        let key = DateFormatting.normalizeToDay(date)
+        return journals[key] ?? ""
+    }
+
+    /// Get the event lines for a date (from EventKit)
+    func eventLinesForDate(_ date: Date) -> [String] {
+        let key = DateFormatting.normalizeToDay(date)
+        return eventLines[key] ?? []
+    }
+
+    /// Refresh event lines from EventKit for a specific date
+    func refreshEvents(for date: Date) async {
+        guard let ekManager = eventKitManager, hasCalendarAccess else { return }
+        let key = DateFormatting.normalizeToDay(date)
+        let ekEvents = await ekManager.events(for: key)
+
+        var lines: [String] = []
+        for event in ekEvents {
+            lines.append(EventKitSync.textLine(from: event))
+            lines.append(contentsOf: EventKitSync.noteLines(from: event))
+        }
+        eventLines[key] = lines.isEmpty ? nil : lines
+    }
+
+    // MARK: - Writing
+
+    /// Update from the text editor. Parses the full text, separates events from journal,
+    /// writes events to EventKit and journal to file storage.
     func update(date: Date, text: String) {
         let key = DateFormatting.normalizeToDay(date)
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lines = text.components(separatedBy: "\n")
 
-        if trimmed.isEmpty {
-            days.removeValue(forKey: key)
-        } else {
-            days[key] = DayEntry(id: key, rawText: text)
-        }
+        var journalLines: [String] = []
+        var parsedEvents: [ParsedEventGroup] = []
+        var currentEvent: ParsedEventGroup?
 
-        recurrenceStore.rebuildIndex(from: days)
-        scheduleSave()
-    }
-
-    /// Remove a single materialized recurring event from a specific date
-    func skipRecurringEvent(line: String, on date: Date) {
-        if let event = recurrenceStore.findEvent(forLine: line, on: date) {
-            recurrenceStore.addException(eventId: event.id, date: date)
-            scheduleSave()
-        }
-    }
-
-    /// End a recurring event from a specific date forward
-    func endRecurringEvent(line: String, from date: Date) {
-        if let event = recurrenceStore.findEvent(forLine: line, on: date) {
-            recurrenceStore.endRecurrence(eventId: event.id, from: date)
-            scheduleSave()
-        }
-    }
-
-    /// Get DayEntry objects for a contiguous date range, filling in empty days
-    func entries(from start: Date, to end: Date) -> [DayEntry] {
-        DateFormatting.dateRange(from: start, to: end).map { date in
-            days[date] ?? DayEntry(id: date, rawText: "")
-        }
-    }
-
-    /// Load from disk
-    func load() async {
-        guard let fileStore else { return }
-        do {
-            let content = try await fileStore.load()
-            let (loaded, exceptions, endOverrides) = DocumentSerializer.deserialize(content)
-            for entry in loaded {
-                if !entry.isEmpty {
-                    days[entry.id] = entry
+        for line in lines {
+            let parsed = LineParser.parse(line)
+            switch parsed {
+            case .event(let time, let endTime, let title, let recurrence):
+                if let pending = currentEvent {
+                    parsedEvents.append(pending)
                 }
-            }
-            recurrenceStore.rebuildIndex(from: days)
+                currentEvent = ParsedEventGroup(
+                    title: title,
+                    startTime: time,
+                    endTime: endTime,
+                    isAllDay: false,
+                    recurrence: recurrence,
+                    notes: []
+                )
 
-            // Restore exceptions and end overrides
-            for exception in exceptions {
-                recurrenceStore.exceptions.insert(exception)
+            case .allDay(let title, let recurrence):
+                if let pending = currentEvent {
+                    parsedEvents.append(pending)
+                }
+                currentEvent = ParsedEventGroup(
+                    title: title,
+                    startTime: nil,
+                    endTime: nil,
+                    isAllDay: true,
+                    recurrence: recurrence,
+                    notes: []
+                )
+
+            case .eventNote(let noteText):
+                if currentEvent != nil {
+                    currentEvent?.notes.append(noteText)
+                } else {
+                    journalLines.append(line)
+                }
+
+            case .journal:
+                if let pending = currentEvent {
+                    parsedEvents.append(pending)
+                    currentEvent = nil
+                }
+                journalLines.append(line)
+
+            case .blank:
+                if let pending = currentEvent {
+                    parsedEvents.append(pending)
+                    currentEvent = nil
+                }
+                journalLines.append(line)
             }
-            for (eventId, endDate) in endOverrides {
-                recurrenceStore.endOverrides[eventId] = endDate
-            }
-        } catch {
-            // First launch or empty file — start fresh
         }
+
+        if let pending = currentEvent {
+            parsedEvents.append(pending)
+        }
+
+        // Update journal text
+        let journalText = journalLines.joined(separator: "\n")
+            .trimmingCharacters(in: .newlines)
+        if journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            journals.removeValue(forKey: key)
+        } else {
+            journals[key] = journalText
+        }
+
+        // Save journal to file
+        scheduleJournalSave(date: key, text: journalText)
+
+        // Write events to EventKit
+        if hasCalendarAccess && !parsedEvents.isEmpty {
+            let events = parsedEvents
+            Task {
+                await syncEventsToEventKit(date: key, events: events)
+                await refreshEvents(for: key)
+            }
+        }
+    }
+
+    /// Update just the journal text (no event parsing)
+    func updateJournal(date: Date, text: String) {
+        let key = DateFormatting.normalizeToDay(date)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            journals.removeValue(forKey: key)
+        } else {
+            journals[key] = text
+        }
+        scheduleJournalSave(date: key, text: text)
     }
 
     /// Force an immediate save (e.g., on app background)
     func forceSave() async {
         guard let fileStore else { return }
-        let content = DocumentSerializer.serialize(
-            days: days,
-            exceptions: recurrenceStore.exceptions,
-            endOverrides: recurrenceStore.endOverrides
-        )
-        try? await fileStore.save(content)
+        for (date, text) in journals {
+            try? await fileStore.saveJournal(text, for: date)
+        }
     }
 
-    private func scheduleSave() {
+    // MARK: - EventKit Sync
+
+    private func syncEventsToEventKit(date: Date, events: [ParsedEventGroup]) async {
+        guard let ekManager = eventKitManager else { return }
+
+        // Remove existing TextCal events for this date, then recreate
+        await ekManager.removeTextCalEvents(for: date)
+
+        for event in events {
+            let ekRule: EKRecurrenceRule?
+            if let recurrence = event.recurrence {
+                ekRule = EventKitSync.ekRecurrenceRule(from: recurrence)
+            } else {
+                ekRule = nil
+            }
+
+            let notes = event.notes.isEmpty ? nil : event.notes.joined(separator: "\n")
+
+            await ekManager.saveEvent(
+                title: event.title,
+                date: date,
+                startTime: event.startTime,
+                endTime: event.endTime,
+                isAllDay: event.isAllDay,
+                notes: notes,
+                recurrenceRule: ekRule
+            )
+        }
+    }
+
+    // MARK: - Persistence
+
+    private func scheduleJournalSave(date: Date, text: String) {
         guard let coalescer, let fileStore else { return }
-        let daysCopy = days
-        let exceptions = recurrenceStore.exceptions
-        let endOverrides = recurrenceStore.endOverrides
         Task {
             await coalescer.enqueue {
-                let content = DocumentSerializer.serialize(
-                    days: daysCopy,
-                    exceptions: exceptions,
-                    endOverrides: endOverrides
-                )
-                try await fileStore.save(content)
+                try await fileStore.saveJournal(text, for: date)
             }
         }
     }
+
+    // MARK: - Migration
+
+    private func migrateLegacyIfNeeded() async {
+        guard let fileStore else { return }
+        let hasLegacy = await fileStore.hasLegacyFile()
+        guard hasLegacy else { return }
+
+        do {
+            let content = try await fileStore.loadLegacy()
+            let (entries, _, _) = DocumentSerializer.deserialize(content)
+
+            for entry in entries where !entry.isEmpty {
+                let lines = entry.rawText.components(separatedBy: "\n")
+                var journalLines: [String] = []
+
+                for line in lines {
+                    let parsed = LineParser.parse(line)
+                    switch parsed {
+                    case .event, .allDay:
+                        // Events will be re-entered by the user or could be bulk-imported
+                        // For now, preserve them as journal text during migration
+                        journalLines.append(line)
+                    case .eventNote:
+                        journalLines.append(line)
+                    case .journal:
+                        journalLines.append(line)
+                    case .blank:
+                        journalLines.append(line)
+                    }
+                }
+
+                let journalText = journalLines.joined(separator: "\n")
+                    .trimmingCharacters(in: .newlines)
+                if !journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    journals[entry.id] = journalText
+                    try await fileStore.saveJournal(journalText, for: entry.id)
+                }
+            }
+
+            try await fileStore.removeLegacyFile()
+        } catch {
+            // Migration failed — leave legacy file in place
+        }
+    }
+}
+
+/// A group of parsed event data ready to write to EventKit
+private struct ParsedEventGroup {
+    let title: String
+    let startTime: DateComponents?
+    let endTime: DateComponents?
+    let isAllDay: Bool
+    let recurrence: RecurrenceRule?
+    var notes: [String]
 }

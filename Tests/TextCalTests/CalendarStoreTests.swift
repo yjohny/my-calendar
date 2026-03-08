@@ -5,50 +5,33 @@ import Foundation
 @Suite("CalendarStore Tests")
 @MainActor
 struct CalendarStoreTests {
-    @Test("Empty store returns empty text for any date")
+    @Test("Empty store returns empty journal text for any date")
     func emptyStore() {
         let store = CalendarStore()
-        let text = store.text(for: Date())
+        let text = store.journalText(for: Date())
         #expect(text == "")
     }
 
-    @Test("Update stores text for a date")
-    func updateStoresText() {
+    @Test("Update journal stores text for a date")
+    func updateStoresJournal() {
         let store = CalendarStore()
         let date = Date()
-        store.update(date: date, text: "Hello world")
-        #expect(store.text(for: date) == "Hello world")
+        store.updateJournal(date: date, text: "Had a great day.")
+        #expect(store.journalText(for: date) == "Had a great day.")
     }
 
-    @Test("Update with empty text removes the entry")
+    @Test("Update journal with empty text removes the entry")
     func updateRemovesEmpty() {
         let store = CalendarStore()
         let date = Date()
-        store.update(date: date, text: "Some content")
-        #expect(store.text(for: date) == "Some content")
+        store.updateJournal(date: date, text: "Some content")
+        #expect(store.journalText(for: date) == "Some content")
 
-        store.update(date: date, text: "   ")
-        #expect(store.text(for: date) == "")
+        store.updateJournal(date: date, text: "   ")
+        #expect(store.journalText(for: date) == "")
     }
 
-    @Test("Entries returns filled range with empty days")
-    func entriesReturnsRange() {
-        let store = CalendarStore()
-        let calendar = Calendar.current
-        let today = DateFormatting.today
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
-        let dayAfter = calendar.date(byAdding: .day, value: 2, to: today)!
-
-        store.update(date: today, text: "Today's note")
-
-        let entries = store.entries(from: today, to: dayAfter)
-        #expect(entries.count == 3)
-        #expect(entries[0].rawText == "Today's note")
-        #expect(entries[1].rawText == "")  // tomorrow, empty
-        #expect(entries[2].rawText == "")  // day after, empty
-    }
-
-    @Test("Normalizes dates to midnight")
+    @Test("Normalizes dates to midnight for journal")
     func normalizesDate() {
         let store = CalendarStore()
         var components = DateComponents()
@@ -63,7 +46,25 @@ struct CalendarStoreTests {
         components.minute = 0
         let morning = Calendar.current.date(from: components)!
 
-        store.update(date: afternoon, text: "Afternoon note")
-        #expect(store.text(for: morning) == "Afternoon note")
+        store.updateJournal(date: afternoon, text: "Afternoon note")
+        #expect(store.journalText(for: morning) == "Afternoon note")
+    }
+
+    @Test("Display text shows journal when no events")
+    func displayTextJournalOnly() {
+        let store = CalendarStore()
+        let date = Date()
+        store.updateJournal(date: date, text: "Just journaling.")
+        let display = store.displayText(for: date)
+        #expect(display == "Just journaling.")
+    }
+
+    @Test("Update separates journal from events")
+    func updateSeparatesContent() {
+        let store = CalendarStore()
+        let date = Date()
+        // Without EventKit configured, events won't sync but journal should be extracted
+        store.update(date: date, text: "9:00 AM - Meeting\nHad a good day.")
+        #expect(store.journalText(for: date) == "Had a good day.")
     }
 }

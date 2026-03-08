@@ -3,31 +3,31 @@ import SwiftUI
 /// Displays day text with subtle styling: event lines get a color accent on the time portion
 struct StyledTextView: View {
     let text: String
-    var materializedLines: [String] = []
+    var eventLines: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            // Show materialized recurring events first
-            ForEach(Array(materializedLines.enumerated()), id: \.offset) { _, line in
-                styledLine(line, isMaterialized: true)
+            // Show EventKit events first
+            ForEach(Array(eventLines.enumerated()), id: \.offset) { _, line in
+                styledLine(line, isFromEventKit: true)
             }
-            // Then show user-typed text
+            // Then show journal text
             ForEach(Array(text.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
-                styledLine(line, isMaterialized: false)
+                styledLine(line, isFromEventKit: false)
             }
         }
     }
 
     @ViewBuilder
-    private func styledLine(_ line: String, isMaterialized: Bool) -> some View {
+    private func styledLine(_ line: String, isFromEventKit: Bool) -> some View {
         if line.trimmingCharacters(in: .whitespaces).isEmpty {
             Text(" ")
                 .font(.system(.body, design: .monospaced))
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if let match = LineParser.parseAllDayLine(line) {
-            allDayView(match: match, isMaterialized: isMaterialized)
+            allDayView(match: match, isFromEventKit: isFromEventKit)
         } else if let match = LineParser.parseEventLine(line) {
-            eventView(match: match, isMaterialized: isMaterialized)
+            eventView(match: match, isFromEventKit: isFromEventKit)
         } else if line.hasPrefix("  ") {
             Text(line)
                 .font(.system(.body, design: .monospaced))
@@ -41,7 +41,7 @@ struct StyledTextView: View {
     }
 
     @ViewBuilder
-    private func allDayView(match: AllDayMatch, isMaterialized: Bool) -> some View {
+    private func allDayView(match: AllDayMatch, isFromEventKit: Bool) -> some View {
         HStack(spacing: 0) {
             Text("★ ")
                 .font(.system(.body, design: .monospaced))
@@ -55,20 +55,17 @@ struct StyledTextView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .opacity(isMaterialized ? 0.75 : 1.0)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private func eventView(match: EventLineMatch, isMaterialized: Bool) -> some View {
+    private func eventView(match: EventLineMatch, isFromEventKit: Bool) -> some View {
         HStack(spacing: 0) {
-            // Time display
             Text(match.timeText)
                 .font(.system(.body, design: .monospaced))
                 .fontWeight(.medium)
                 .foregroundStyle(Color.accentColor)
 
-            // End time (time range)
             if let endTime = match.endTimeText {
                 Text("–")
                     .font(.system(.body, design: .monospaced))
@@ -88,7 +85,6 @@ struct StyledTextView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .opacity(isMaterialized ? 0.75 : 1.0)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
