@@ -33,3 +33,4 @@ Xcode project: `TextCal.xcodeproj`
 - **DayTextEditor refresh**: Uses a cancellable `refreshTask` to prevent stale async results from overwriting current state when the user scrolls quickly between dates.
 - **StyledTextView**: Uses concatenated `Text` views (not `HStack`) so long event names wrap to the next line naturally.
 - **Buttons**: Today, Help, and Calendar overlay buttons are intentionally subtle/small to avoid visual clutter.
+- **SwiftUI List with non-Identifiable types**: When using `EKCalendar` or other non-`Identifiable` EventKit types in a `List`, use `List { ForEach(items, id: \.keyPath) { ... } }` instead of `List(items, id: \.keyPath) { ... }`. The direct `List` initializer fails to infer generic parameters for these types, causing cascading build errors.
