@@ -194,4 +194,30 @@ Had coffee.
         let result = LineParser.extractCalendarPrefix("9:00 AM - Meeting")
         #expect(result == nil)
     }
+
+    @Test("Empty brackets are not a calendar prefix")
+    func emptyBrackets() {
+        let result = LineParser.extractCalendarPrefix("[   ] 9:00 AM - Meeting")
+        #expect(result == nil)
+    }
+
+    @Test("Calendar prefix on journal text is preserved as journal")
+    func calendarPrefixOnJournalText() {
+        let result = LineParser.parse("[Work] Had a great meeting")
+        guard case .journal(let text) = result else {
+            Issue.record("Expected journal, got \(result)")
+            return
+        }
+        #expect(text == "[Work] Had a great meeting")
+    }
+
+    @Test("Calendar prefix on blank remainder is treated as journal")
+    func calendarPrefixOnBlankRemainder() {
+        let result = LineParser.parse("[Work]")
+        guard case .journal(let text) = result else {
+            Issue.record("Expected journal, got \(result)")
+            return
+        }
+        #expect(text == "[Work]")
+    }
 }

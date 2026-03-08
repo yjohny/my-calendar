@@ -25,6 +25,7 @@ enum LineParser {
     static func extractCalendarPrefix(_ line: String) -> (calendarName: String, remainder: String)? {
         guard let match = line.prefixMatch(of: calendarPrefixPattern) else { return nil }
         let name = String(match.1).trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return nil }  // reject empty brackets like [  ]
         let remainder = String(line[match.range.upperBound...])
         return (name, remainder)
     }
@@ -35,26 +36,38 @@ enum LineParser {
             return .blank
         }
 
-        // Extract optional [CalendarName] prefix before parsing
-        var calendarName: String?
-        var lineToProcess = line
+        // Try extracting a [CalendarName] prefix, but only use it if the
+        // remainder parses as an event. Otherwise preserve the original line
+        // so text like "[Work] had a great day" stays intact as journal.
         if let prefix = extractCalendarPrefix(line) {
-            calendarName = prefix.calendarName
-            lineToProcess = prefix.remainder
+            let remainder = prefix.remainder
+            if let match = parseAllDayLine(remainder) {
+                return .allDay(title: match.title, recurrence: match.recurrence, calendarName: prefix.calendarName)
+            }
+            if let match = parseEventLine(remainder) {
+                return .event(
+                    time: match.timeComponents,
+                    endTime: match.endTimeComponents,
+                    title: match.title,
+                    recurrence: match.recurrence,
+                    calendarName: prefix.calendarName
+                )
+            }
+            // Prefix didn't precede an event — fall through to normal parsing
         }
 
         // Check all-day event first (* prefix)
-        if let match = parseAllDayLine(lineToProcess) {
-            return .allDay(title: match.title, recurrence: match.recurrence, calendarName: calendarName ?? match.calendarName)
+        if let match = parseAllDayLine(line) {
+            return .allDay(title: match.title, recurrence: match.recurrence, calendarName: nil)
         }
 
-        if let match = parseEventLine(lineToProcess) {
+        if let match = parseEventLine(line) {
             return .event(
                 time: match.timeComponents,
                 endTime: match.endTimeComponents,
                 title: match.title,
                 recurrence: match.recurrence,
-                calendarName: calendarName ?? match.calendarName
+                calendarName: nil
             )
         }
 

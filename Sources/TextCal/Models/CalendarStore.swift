@@ -260,63 +260,89 @@ final class CalendarStore {
 
         // Resolve the default calendar
         let defaultCal = await resolveDefaultCalendar()
+        let defaultCalId = defaultCal?.calendarIdentifier
 
-        // Group events by their target calendar identifier
-        var eventsByCalendar: [String: [ParsedEventGroup]] = [:]
+        // Separate events: ones going to the default calendar vs. override calendars
+        var defaultCalEvents: [ParsedEventGroup] = []
+        var overrideEvents: [(event: ParsedEventGroup, calendar: EKCalendar)] = []
+
         for event in events {
-            let cal = await resolveCalendar(for: event, defaultCalendar: defaultCal)
-            let calId = cal?.calendarIdentifier ?? defaultCal?.calendarIdentifier ?? ""
-            eventsByCalendar[calId, default: []].append(event)
+            if let name = event.calendarName,
+               let cal = await ekManager.calendarByTitle(name),
+               cal.calendarIdentifier != defaultCalId {
+                // Explicit [CalendarName] override to a non-default calendar
+                overrideEvents.append((event, cal))
+            } else {
+                // No prefix, or prefix matches the default → goes to default
+                defaultCalEvents.append(event)
+            }
         }
 
-        // For each target calendar, remove old non-recurring events and recreate
-        for (calId, calEvents) in eventsByCalendar {
-            guard !calId.isEmpty else { continue }
-
+        // --- Default calendar: safe to delete-and-recreate (we own these events) ---
+        if let defaultCal = defaultCal {
+            let calId = defaultCal.calendarIdentifier
             let existingEvents = await ekManager.managedEvents(for: date, calendarIdentifier: calId)
             let existingRecurring = existingEvents.filter { $0.hasRecurrenceRules }
 
-            // Remove non-recurring events we manage in this calendar
+            // Remove only non-recurring events in the default calendar
             await ekManager.removeManagedEvents(for: date, calendarIdentifier: calId)
 
-            let targetCal = await ekManager.calendarForIdentifier(calId)
-
-            for event in calEvents {
+            for event in defaultCalEvents {
                 if matchesExistingRecurring(event, existing: existingRecurring, date: date) {
                     continue
                 }
-
-                let ekRule: EKRecurrenceRule?
-                if let recurrence = event.recurrence {
-                    ekRule = EventKitSync.ekRecurrenceRule(from: recurrence)
-                } else {
-                    ekRule = nil
-                }
-
-                let notes = event.notes.isEmpty ? nil : event.notes.joined(separator: "\n")
-
-                await ekManager.saveEvent(
-                    title: event.title,
-                    date: date,
-                    startTime: event.startTime,
-                    endTime: event.endTime,
-                    isAllDay: event.isAllDay,
-                    notes: notes,
-                    recurrenceRule: ekRule,
-                    calendar: targetCal
-                )
+                await saveEventToKit(event, date: date, calendar: defaultCal, ekManager: ekManager)
             }
+        }
+
+        // --- Override calendars: create-only (never delete events we don't own) ---
+        // For non-default calendars, we only ADD events. We skip if an event with
+        // the same title and time already exists (to avoid duplicates).
+        for (event, cal) in overrideEvents {
+            let existingInCal = await ekManager.managedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
+            if matchesExistingEvent(event, existing: existingInCal, date: date) {
+                continue  // already exists, don't duplicate
+            }
+            await saveEventToKit(event, date: date, calendar: cal, ekManager: ekManager)
         }
     }
 
-    /// Resolve which EKCalendar to use for a parsed event
-    private func resolveCalendar(for event: ParsedEventGroup, defaultCalendar: EKCalendar?) async -> EKCalendar? {
-        guard let ekManager = eventKitManager else { return defaultCalendar }
-        if let name = event.calendarName,
-           let cal = await ekManager.calendarByTitle(name) {
-            return cal
+    /// Save a single parsed event to EventKit
+    private func saveEventToKit(_ event: ParsedEventGroup, date: Date, calendar: EKCalendar, ekManager: EventKitManager) async {
+        let ekRule: EKRecurrenceRule?
+        if let recurrence = event.recurrence {
+            ekRule = EventKitSync.ekRecurrenceRule(from: recurrence)
+        } else {
+            ekRule = nil
         }
-        return defaultCalendar
+        let notes = event.notes.isEmpty ? nil : event.notes.joined(separator: "\n")
+        await ekManager.saveEvent(
+            title: event.title,
+            date: date,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            isAllDay: event.isAllDay,
+            notes: notes,
+            recurrenceRule: ekRule,
+            calendar: calendar
+        )
+    }
+
+    /// Check if a parsed event matches ANY existing event (recurring or not) by title + time
+    private func matchesExistingEvent(_ parsed: ParsedEventGroup, existing: [EKEvent], date: Date) -> Bool {
+        let cal = Calendar.current
+        for ekEvent in existing {
+            guard ekEvent.title == parsed.title else { continue }
+            guard ekEvent.isAllDay == parsed.isAllDay else { continue }
+            if parsed.isAllDay { return true }
+            if let startTime = parsed.startTime {
+                let ekComps = cal.dateComponents([.hour, .minute], from: ekEvent.startDate)
+                if ekComps.hour == startTime.hour && ekComps.minute == startTime.minute {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     /// Resolve the user's default calendar (setting → TextCal fallback)
