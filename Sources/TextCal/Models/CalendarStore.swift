@@ -209,10 +209,19 @@ final class CalendarStore {
     private func syncEventsToEventKit(date: Date, events: [ParsedEventGroup]) async {
         guard let ekManager = eventKitManager else { return }
 
-        // Remove existing TextCal events for this date, then recreate
+        // Get existing recurring events so we can skip duplicates
+        let existingEvents = await ekManager.textCalEvents(for: date)
+        let existingRecurring = existingEvents.filter { $0.hasRecurrenceRules }
+
+        // Remove only non-recurring TextCal events for this date
         await ekManager.removeTextCalEvents(for: date)
 
         for event in events {
+            // Skip if this matches an existing recurring event occurrence
+            if matchesExistingRecurring(event, existing: existingRecurring, date: date) {
+                continue
+            }
+
             let ekRule: EKRecurrenceRule?
             if let recurrence = event.recurrence {
                 ekRule = EventKitSync.ekRecurrenceRule(from: recurrence)
@@ -232,6 +241,28 @@ final class CalendarStore {
                 recurrenceRule: ekRule
             )
         }
+    }
+
+    /// Check if a parsed event matches an existing recurring event occurrence
+    private func matchesExistingRecurring(_ parsed: ParsedEventGroup, existing: [EKEvent], date: Date) -> Bool {
+        let cal = Calendar.current
+        for ekEvent in existing {
+            guard ekEvent.title == parsed.title else { continue }
+            guard ekEvent.isAllDay == parsed.isAllDay else { continue }
+
+            if parsed.isAllDay {
+                return true
+            }
+
+            // Compare start times
+            if let startTime = parsed.startTime {
+                let ekComps = cal.dateComponents([.hour, .minute], from: ekEvent.startDate)
+                if ekComps.hour == startTime.hour && ekComps.minute == startTime.minute {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     // MARK: - Persistence

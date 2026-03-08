@@ -10,15 +10,14 @@ struct TodayButtonOverlay: View {
                 Spacer()
                 Button(action: onTap) {
                     Image(systemName: "calendar.badge.clock")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .frame(width: 52, height: 52)
-                        .background(Color.accentColor, in: Circle())
-                        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 36, height: 36)
+                        .background(Color(.systemGray5), in: Circle())
+                        .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
                 }
-                .padding(.trailing, 20)
-                .padding(.bottom, 24)
+                .padding(.trailing, 16)
+                .padding(.bottom, 20)
             }
         }
     }
