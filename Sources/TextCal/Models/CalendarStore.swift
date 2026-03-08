@@ -337,9 +337,14 @@ final class CalendarStore {
             if parsed.isAllDay { return true }
             if let startTime = parsed.startTime {
                 let ekComps = cal.dateComponents([.hour, .minute], from: ekEvent.startDate)
-                if ekComps.hour == startTime.hour && ekComps.minute == startTime.minute {
-                    return true
+                guard ekComps.hour == startTime.hour && ekComps.minute == startTime.minute else { continue }
+
+                // Also compare end time so edits to duration are detected
+                if let endTime = parsed.endTime {
+                    let ekEndComps = cal.dateComponents([.hour, .minute], from: ekEvent.endDate)
+                    guard ekEndComps.hour == endTime.hour && ekEndComps.minute == endTime.minute else { continue }
                 }
+                return true
             }
         }
         return false

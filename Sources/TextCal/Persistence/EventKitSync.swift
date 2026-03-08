@@ -77,12 +77,17 @@ enum EventKitSync {
 
         switch rule.frequency {
         case .daily:
-            if rule.daysOfTheWeek?.count == 5 {
-                return "(every weekday)"
-            }
             return "(daily)"
 
         case .weekly:
+            if let days = rule.daysOfTheWeek, days.count == 5 {
+                // Mon-Fri weekday rule (created as .weekly with 5 days)
+                let weekdayValues = Set(days.map { $0.dayOfTheWeek.rawValue })
+                let monToFri = Set([EKWeekday.monday.rawValue, .tuesday.rawValue, .wednesday.rawValue, .thursday.rawValue, .friday.rawValue])
+                if weekdayValues == monToFri {
+                    return "(every weekday)"
+                }
+            }
             if let days = rule.daysOfTheWeek, days.count == 1 {
                 let dayNames = ["", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
                 let dayIndex = days[0].dayOfTheWeek.rawValue
