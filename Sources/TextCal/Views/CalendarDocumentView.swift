@@ -3,7 +3,6 @@ import SwiftUI
 struct CalendarDocumentView: View {
     @Environment(CalendarStore.self) private var store
     @State private var viewModel = CalendarViewModel()
-    @State private var hasScrolledToToday = false
 
     var body: some View {
         ZStack {
@@ -18,14 +17,12 @@ struct CalendarDocumentView: View {
                                 }
                         }
                     }
+                    .frame(maxWidth: .infinity)
                 }
+                .defaultScrollAnchor(.center)
                 .onAppear {
-                    if !hasScrolledToToday {
-                        // Small delay to let LazyVStack render
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            proxy.scrollTo(DateFormatting.today, anchor: .top)
-                            hasScrolledToToday = true
-                        }
+                    DispatchQueue.main.async {
+                        proxy.scrollTo(DateFormatting.today, anchor: .top)
                     }
                 }
                 .onChange(of: viewModel.scrollTarget) { _, target in
