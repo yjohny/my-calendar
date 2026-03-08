@@ -3,6 +3,7 @@ import SwiftUI
 struct CalendarDocumentView: View {
     @Environment(CalendarStore.self) private var store
     @State private var viewModel = CalendarViewModel()
+    @State private var showingSyntaxHelp = false
 
     var body: some View {
         ZStack {
@@ -41,7 +42,14 @@ struct CalendarDocumentView: View {
             TodayButtonOverlay {
                 viewModel.scrollToToday()
             }
+
+            HelpButtonOverlay {
+                showingSyntaxHelp = true
+            }
         }
         .background(Color(.systemBackground))
+        .sheet(isPresented: $showingSyntaxHelp) {
+            SyntaxHelpView()
+        }
     }
 }

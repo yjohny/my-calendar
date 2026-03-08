@@ -8,6 +8,7 @@ struct RecurrenceRule: Equatable, Codable {
         case weekly(weekday: Int)      // 1=Sunday, 2=Monday, ... 7=Saturday
         case biweekly(weekday: Int)
         case monthly(day: Int)         // day of month (1-31)
+        case yearly(month: Int, day: Int)  // month (1-12) and day of month
     }
 
     let frequency: Frequency
@@ -49,6 +50,11 @@ struct RecurrenceRule: Equatable, Codable {
         case .monthly(let targetDay):
             let day = calendar.component(.day, from: date)
             return day == targetDay
+
+        case .yearly(let targetMonth, let targetDay):
+            let month = calendar.component(.month, from: date)
+            let day = calendar.component(.day, from: date)
+            return month == targetMonth && day == targetDay
         }
     }
 }

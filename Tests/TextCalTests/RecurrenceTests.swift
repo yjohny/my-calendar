@@ -142,6 +142,47 @@ struct RecurrenceTests {
         #expect(rule.appliesTo(date: nextTuesday, sourceDate: tuesday) == true)
     }
 
+    @Test("Parses (yearly) recurrence")
+    func parseYearly() {
+        let rule = TimePatterns.parseRecurrence("yearly")
+        #expect(rule != nil)
+        if case .yearly = rule?.frequency {} else {
+            Issue.record("Expected yearly")
+        }
+    }
+
+    @Test("Parses (annually) recurrence")
+    func parseAnnually() {
+        let rule = TimePatterns.parseRecurrence("annually")
+        #expect(rule != nil)
+        if case .yearly = rule?.frequency {} else {
+            Issue.record("Expected yearly")
+        }
+    }
+
+    @Test("Parses (every year) recurrence")
+    func parseEveryYear() {
+        let rule = TimePatterns.parseRecurrence("every year")
+        #expect(rule != nil)
+        if case .yearly = rule?.frequency {} else {
+            Issue.record("Expected yearly")
+        }
+    }
+
+    @Test("Yearly rule applies on correct month and day")
+    func yearlyRule() {
+        let rule = RecurrenceRule(frequency: .yearly(month: 3, day: 15), rawText: "(yearly)")
+        let source = makeDate(year: 2026, month: 3, day: 15)
+        let nextYear = makeDate(year: 2027, month: 3, day: 15)
+        let wrongDay = makeDate(year: 2027, month: 3, day: 16)
+        let wrongMonth = makeDate(year: 2027, month: 4, day: 15)
+
+        #expect(rule.appliesTo(date: source, sourceDate: source) == true)
+        #expect(rule.appliesTo(date: nextYear, sourceDate: source) == true)
+        #expect(rule.appliesTo(date: wrongDay, sourceDate: source) == false)
+        #expect(rule.appliesTo(date: wrongMonth, sourceDate: source) == false)
+    }
+
     @Test("Monthly rule applies on correct day of month")
     func monthlyRule() {
         let rule = RecurrenceRule(frequency: .monthly(day: 15), rawText: "(monthly 15th)")

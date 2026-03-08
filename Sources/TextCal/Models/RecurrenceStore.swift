@@ -136,6 +136,10 @@ final class RecurrenceStore {
         case .monthly(let day) where day == 0:
             let sourceDay = calendar.component(.day, from: sourceDate)
             return RecurrenceRule(frequency: .monthly(day: sourceDay), rawText: rule.rawText)
+        case .yearly(let month, let day) where month == 0 && day == 0:
+            let sourceMonth = calendar.component(.month, from: sourceDate)
+            let sourceDay = calendar.component(.day, from: sourceDate)
+            return RecurrenceRule(frequency: .yearly(month: sourceMonth, day: sourceDay), rawText: rule.rawText)
         default:
             return rule
         }

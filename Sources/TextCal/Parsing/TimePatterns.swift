@@ -93,6 +93,11 @@ enum TimePatterns {
             }
         }
 
+        if trimmed == "yearly" || trimmed == "every year" || trimmed == "annually" {
+            // Sentinel 0,0 — resolved to source date's month/day at materialization time
+            return RecurrenceRule(frequency: .yearly(month: 0, day: 0), rawText: "(\(text.trimmingCharacters(in: .whitespaces)))")
+        }
+
         return nil
     }
 }
