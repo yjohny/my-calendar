@@ -9,16 +9,15 @@ struct HelpButtonOverlay: View {
             HStack {
                 Spacer()
                 Button(action: onTap) {
-                    Image(systemName: "questionmark.circle.fill")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color(.systemGray), in: Circle())
-                        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+                    Image(systemName: "questionmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 28, height: 28)
+                        .background(Color(.systemGray6), in: Circle())
+                        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
                 }
-                .padding(.trailing, 24)
-                .padding(.bottom, 88)  // positioned above the today button
+                .padding(.trailing, 16)
+                .padding(.bottom, 68)  // positioned above the today button
             }
         }
     }

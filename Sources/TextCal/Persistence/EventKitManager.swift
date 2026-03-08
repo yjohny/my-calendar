@@ -127,13 +127,23 @@ actor EventKitManager {
         try? store.remove(event, span: span, commit: true)
     }
 
-    /// Remove all events in TextCal calendar for a given date
+    /// Remove non-recurring events in TextCal calendar for a given date.
+    /// Recurring event occurrences are left untouched to avoid duplication bugs.
     func removeTextCalEvents(for date: Date) {
         guard let cal = getOrCreateCalendar() else { return }
         let dayEvents = events(for: date).filter { $0.calendar.calendarIdentifier == cal.calendarIdentifier }
         for event in dayEvents {
+            if event.hasRecurrenceRules {
+                continue  // skip recurring occurrences
+            }
             try? store.remove(event, span: .thisEvent, commit: true)
         }
+    }
+
+    /// Fetch TextCal events for a specific date
+    func textCalEvents(for date: Date) -> [EKEvent] {
+        guard let cal = getOrCreateCalendar() else { return [] }
+        return events(for: date).filter { $0.calendar.calendarIdentifier == cal.calendarIdentifier }
     }
 
     /// Check if the user has granted calendar access
