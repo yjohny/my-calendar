@@ -22,7 +22,7 @@ struct DateJumpPicker: View {
                     dismiss()
                 } label: {
                     Text("Go to \(formattedDate)")
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(.body, design: .rounded))
                         .fontWeight(.medium)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)

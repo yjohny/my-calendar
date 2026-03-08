@@ -220,4 +220,56 @@ Had coffee.
         }
         #expect(text == "[Work]")
     }
+
+    // MARK: - Calendar suffix tests (new format)
+
+    @Test("Parses event with calendar suffix")
+    func eventWithCalendarSuffix() {
+        let result = LineParser.parse("9:00 AM - Team standup [Work]")
+        guard case .event(let time, _, let title, _, let calendarName) = result else {
+            Issue.record("Expected event, got \(result)")
+            return
+        }
+        #expect(time.hour == 9)
+        #expect(title == "Team standup")
+        #expect(calendarName == "Work")
+    }
+
+    @Test("Parses all-day event with calendar suffix")
+    func allDayWithCalendarSuffix() {
+        let result = LineParser.parse("* Birthday party [Personal]")
+        guard case .allDay(let title, _, let calendarName) = result else {
+            Issue.record("Expected allDay, got \(result)")
+            return
+        }
+        #expect(title == "Birthday party")
+        #expect(calendarName == "Personal")
+    }
+
+    @Test("Parses event with recurrence and calendar suffix")
+    func eventWithRecurrenceAndCalendarSuffix() {
+        let result = LineParser.parse("9:00 AM - Team standup (weekly) [Work]")
+        guard case .event(let time, _, let title, let recurrence, let calendarName) = result else {
+            Issue.record("Expected event, got \(result)")
+            return
+        }
+        #expect(time.hour == 9)
+        #expect(title == "Team standup")
+        #expect(recurrence != nil)
+        #expect(calendarName == "Work")
+    }
+
+    @Test("Extracts calendar suffix correctly")
+    func extractCalendarSuffix() {
+        let result = LineParser.extractCalendarSuffix("9:00 AM - Meeting [Work]")
+        #expect(result != nil)
+        #expect(result?.calendarName == "Work")
+        #expect(result?.remainder == "9:00 AM - Meeting")
+    }
+
+    @Test("No calendar suffix returns nil")
+    func noCalendarSuffix() {
+        let result = LineParser.extractCalendarSuffix("9:00 AM - Meeting")
+        #expect(result == nil)
+    }
 }

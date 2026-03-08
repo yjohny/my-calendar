@@ -29,8 +29,8 @@ struct SyntaxHelpView: View {
                     ])
 
                     syntaxSection("Calendar Override", examples: [
-                        ("[Work] 9:00 AM - Standup", "Add to Work calendar"),
-                        ("[Personal] * Birthday", "All-day on Personal calendar"),
+                        ("9:00 AM - Standup [Work]", "Add to Work calendar"),
+                        ("* Birthday [Personal]", "All-day on Personal calendar"),
                         ("3:00 PM - Meeting", "Uses your default calendar"),
                     ])
 
@@ -68,7 +68,7 @@ struct SyntaxHelpView: View {
                 ForEach(Array(examples.enumerated()), id: \.offset) { _, example in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(example.0)
-                            .font(.system(.callout, design: .monospaced))
+                            .font(.system(.callout, design: .rounded))
                             .foregroundStyle(Color.accentColor)
                         if let description = example.1 {
                             Text(description)

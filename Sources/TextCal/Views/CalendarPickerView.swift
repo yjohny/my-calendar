@@ -20,7 +20,7 @@ struct CalendarPickerView: View {
                             .fill(Color(cgColor: calendar.cgColor))
                             .frame(width: 12, height: 12)
                         Text(calendar.title)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.system(.body, design: .rounded))
                             .foregroundStyle(.primary)
                         Spacer()
                         if calendar.calendarIdentifier == selectedIdentifier {

@@ -30,7 +30,7 @@ struct DateScrubber: View {
                 if isDragging {
                     HStack(spacing: 8) {
                         Text(currentLabel)
-                            .font(.system(.subheadline, design: .monospaced))
+                            .font(.system(.subheadline, design: .rounded))
                             .fontWeight(.semibold)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 12)

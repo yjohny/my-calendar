@@ -11,7 +11,7 @@ struct DateHeaderView: View {
     var body: some View {
         HStack {
             Text(DateFormatting.headerString(for: date))
-                .font(.system(.headline, design: .monospaced))
+                .font(.system(.headline, design: .rounded))
                 .fontWeight(isToday ? .bold : .medium)
                 .foregroundStyle(isToday ? Color.accentColor : .primary)
 
@@ -28,8 +28,8 @@ struct DateHeaderView: View {
             Spacer()
         }
         .padding(.horizontal, 16)
-        .padding(.top, 20)
-        .padding(.bottom, 4)
+        .padding(.top, 24)
+        .padding(.bottom, 8)
         .contentShape(Rectangle())
         .onTapGesture {
             onTap?()
