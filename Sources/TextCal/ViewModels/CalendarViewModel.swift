@@ -34,7 +34,22 @@ final class CalendarViewModel {
         }
     }
 
+    /// Jump to a specific date, expanding range if needed
+    func jumpTo(date: Date) {
+        let normalized = DateFormatting.normalizeToDay(date)
+
+        // Expand range to include the target date with padding
+        if normalized < startDate {
+            startDate = calendar.date(byAdding: .day, value: -30, to: normalized)!
+        }
+        if normalized > endDate {
+            endDate = calendar.date(byAdding: .day, value: 30, to: normalized)!
+        }
+
+        scrollTarget = normalized
+    }
+
     func scrollToToday() {
-        scrollTarget = DateFormatting.today
+        jumpTo(date: DateFormatting.today)
     }
 }

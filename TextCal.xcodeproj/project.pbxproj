@@ -32,6 +32,8 @@
 		A10000000000000000000024 /* SyntaxHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000024 /* SyntaxHelpView.swift */; };
 		A10000000000000000000025 /* HelpButtonOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* HelpButtonOverlay.swift */; };
 		A10000000000000000000026 /* EventKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* EventKit.framework */; };
+		A10000000000000000000030 /* DateScrubber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000030 /* DateScrubber.swift */; };
+		A10000000000000000000031 /* DateJumpPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000031 /* DateJumpPicker.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +64,8 @@
 		B10000000000000000000024 /* SyntaxHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHelpView.swift; sourceTree = "<group>"; };
 		B10000000000000000000025 /* HelpButtonOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpButtonOverlay.swift; sourceTree = "<group>"; };
 		B10000000000000000000026 /* EventKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = EventKit.framework; path = System/Library/Frameworks/EventKit.framework; sourceTree = SDKROOT; };
+		B10000000000000000000030 /* DateScrubber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateScrubber.swift; sourceTree = "<group>"; };
+		B10000000000000000000031 /* DateJumpPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateJumpPicker.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -165,6 +169,8 @@
 				B1000000000000000000000D /* TodayButtonOverlay.swift */,
 				B10000000000000000000024 /* SyntaxHelpView.swift */,
 				B10000000000000000000025 /* HelpButtonOverlay.swift */,
+				B10000000000000000000030 /* DateScrubber.swift */,
+				B10000000000000000000031 /* DateJumpPicker.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -288,6 +294,8 @@
 				A10000000000000000000023 /* EventKitSync.swift in Sources */,
 				A10000000000000000000024 /* SyntaxHelpView.swift in Sources */,
 				A10000000000000000000025 /* HelpButtonOverlay.swift in Sources */,
+				A10000000000000000000030 /* DateScrubber.swift in Sources */,
+				A10000000000000000000031 /* DateJumpPicker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

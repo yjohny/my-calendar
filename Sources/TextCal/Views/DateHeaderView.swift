@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DateHeaderView: View {
     let date: Date
+    var onTap: (() -> Void)?
 
     private var isToday: Bool {
         Calendar.current.isDateInToday(date)
@@ -29,5 +30,9 @@ struct DateHeaderView: View {
         .padding(.horizontal, 16)
         .padding(.top, 20)
         .padding(.bottom, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap?()
+        }
     }
 }

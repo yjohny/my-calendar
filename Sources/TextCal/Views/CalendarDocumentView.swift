@@ -4,6 +4,8 @@ struct CalendarDocumentView: View {
     @Environment(CalendarStore.self) private var store
     @State private var viewModel = CalendarViewModel()
     @State private var showingSyntaxHelp = false
+    @State private var showingDatePicker = false
+    @State private var pickerDate = DateFormatting.today
 
     var body: some View {
         ZStack {
@@ -11,11 +13,14 @@ struct CalendarDocumentView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(viewModel.dates, id: \.self) { date in
-                            DaySectionView(date: date)
-                                .id(date)
-                                .onAppear {
-                                    viewModel.expandIfNeeded(visibleDate: date)
-                                }
+                            DaySectionView(date: date) {
+                                pickerDate = date
+                                showingDatePicker = true
+                            }
+                            .id(date)
+                            .onAppear {
+                                viewModel.expandIfNeeded(visibleDate: date)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -39,6 +44,15 @@ struct CalendarDocumentView: View {
                 }
             }
 
+            // Date scrubber on right edge
+            DateScrubber(
+                startDate: viewModel.startDate,
+                endDate: viewModel.endDate
+            ) { date in
+                viewModel.jumpTo(date: date)
+            }
+
+            // Floating buttons
             TodayButtonOverlay {
                 viewModel.scrollToToday()
             }
@@ -50,6 +64,11 @@ struct CalendarDocumentView: View {
         .background(Color(.systemBackground))
         .sheet(isPresented: $showingSyntaxHelp) {
             SyntaxHelpView()
+        }
+        .sheet(isPresented: $showingDatePicker) {
+            DateJumpPicker(selectedDate: $pickerDate) { date in
+                viewModel.jumpTo(date: date)
+            }
         }
     }
 }
