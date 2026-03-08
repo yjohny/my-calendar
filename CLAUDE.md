@@ -21,6 +21,7 @@ Xcode project: `TextCal.xcodeproj`
 - Event format: `9:00 AM - Title`, `9:00-10:30 AM - Title`, `* All Day Event`
 - Recurrence: `(daily)`, `(every weekday)`, `(every Monday)`, `(monthly 15th)`, `(yearly)`
 - Recurring events from EventKit are treated as read-only occurrences during sync — only non-recurring TextCal events are removed and recreated on edit to avoid duplication
+- **Multiple calendars**: Read-all, write-to-one model. `EventKitManager.events(for:)` fetches from all calendars (`calendars: nil`), so events from iCloud, Google, work calendars, etc. all appear. New events are always written to the dedicated "TextCal" calendar. Only TextCal-owned events are ever modified or deleted (filtered by `calendarIdentifier`). Events from other calendars are effectively read-only.
 
 ## Known Patterns to Watch
 - **Recurring event sync**: `syncEventsToEventKit` skips parsed events that match existing recurring occurrences (by title, time, all-day status). Non-recurring events are deleted and recreated. Be careful not to break this deduplication logic.
