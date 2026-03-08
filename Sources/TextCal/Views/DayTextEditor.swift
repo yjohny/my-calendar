@@ -5,11 +5,12 @@ struct DayTextEditor: View {
     @Environment(CalendarStore.self) private var store
     @State private var text: String = ""
     @State private var isEditing = false
-    @State private var eventLines: [String] = []
+    @State private var eventLineInfos: [EventLineInfo] = []
+    @State private var refreshTask: Task<Void, Never>?
     @FocusState private var editorFocused: Bool
 
     private var hasContent: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !eventLines.isEmpty
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !eventLineInfos.isEmpty
     }
 
     var body: some View {
@@ -49,7 +50,7 @@ struct DayTextEditor: View {
             } else {
                 StyledTextView(
                     text: store.journalText(for: date),
-                    eventLines: eventLines
+                    eventLineInfos: eventLineInfos
                 )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 4)
@@ -67,10 +68,13 @@ struct DayTextEditor: View {
 
     private func refreshState() {
         text = store.journalText(for: date)
-        eventLines = store.eventLinesForDate(date)
-        Task {
-            await store.refreshEvents(for: date)
-            eventLines = store.eventLinesForDate(date)
+        eventLineInfos = store.eventLineInfosForDate(date)
+        refreshTask?.cancel()
+        let refreshDate = date
+        refreshTask = Task {
+            await store.refreshEvents(for: refreshDate)
+            guard !Task.isCancelled else { return }
+            eventLineInfos = store.eventLineInfosForDate(refreshDate)
         }
     }
 }

@@ -77,7 +77,7 @@ struct RecurrenceTests {
     @Test("Event line extracts recurrence")
     func eventWithRecurrence() {
         let result = LineParser.parse("9:00 AM - Standup (every weekday)")
-        guard case .event(let time, _, let title, let recurrence) = result else {
+        guard case .event(let time, _, let title, let recurrence, _) = result else {
             Issue.record("Expected event, got \(result)")
             return
         }
@@ -92,7 +92,7 @@ struct RecurrenceTests {
     @Test("Event line without recurrence has nil recurrence")
     func eventWithoutRecurrence() {
         let result = LineParser.parse("9:00 AM - Standup")
-        guard case .event(_, _, _, let recurrence) = result else {
+        guard case .event(_, _, _, let recurrence, _) = result else {
             Issue.record("Expected event")
             return
         }

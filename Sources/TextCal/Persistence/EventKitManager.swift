@@ -6,8 +6,23 @@ actor EventKitManager {
     let store = EKEventStore()
     private var textCalCalendar: EKCalendar?
 
-    /// The name of the calendar we create/use in EventKit
+    /// The name of the fallback calendar we create/use in EventKit
     private let calendarName = "TextCal"
+
+    /// Returns all calendars the user can write to (for calendar picker UI)
+    func writableCalendars() -> [EKCalendar] {
+        store.calendars(for: .event).filter { $0.allowsContentModifications }
+    }
+
+    /// Look up a calendar by its identifier
+    func calendarForIdentifier(_ id: String) -> EKCalendar? {
+        store.calendars(for: .event).first { $0.calendarIdentifier == id }
+    }
+
+    /// Look up a calendar by title (case-insensitive)
+    func calendarByTitle(_ title: String) -> EKCalendar? {
+        store.calendars(for: .event).first { $0.title.localizedCaseInsensitiveCompare(title) == .orderedSame }
+    }
 
     /// Request access to calendar events
     func requestAccess() async -> Bool {
@@ -67,7 +82,7 @@ actor EventKitManager {
         return store.events(matching: predicate)
     }
 
-    /// Create or update an event in the TextCal calendar
+    /// Create or update an event. Uses the provided calendar, or falls back to TextCal.
     @discardableResult
     func saveEvent(
         title: String,
@@ -76,9 +91,10 @@ actor EventKitManager {
         endTime: DateComponents?,
         isAllDay: Bool,
         notes: String?,
-        recurrenceRule: EKRecurrenceRule?
+        recurrenceRule: EKRecurrenceRule?,
+        calendar: EKCalendar? = nil
     ) -> EKEvent? {
-        guard let cal = getOrCreateCalendar() else { return nil }
+        guard let cal = calendar ?? getOrCreateCalendar() else { return nil }
 
         let event = EKEvent(eventStore: store)
         event.title = title
@@ -88,7 +104,8 @@ actor EventKitManager {
         let dayCalendar = Calendar.current
         if isAllDay {
             event.startDate = dayCalendar.startOfDay(for: date)
-            event.endDate = dayCalendar.startOfDay(for: date)
+            // All-day events in EventKit require endDate to be the next day
+            event.endDate = dayCalendar.date(byAdding: .day, value: 1, to: event.startDate) ?? event.startDate.addingTimeInterval(86400)
         } else if let start = startTime {
             var startComps = dayCalendar.dateComponents([.year, .month, .day], from: date)
             startComps.hour = start.hour
@@ -131,7 +148,12 @@ actor EventKitManager {
     /// Recurring event occurrences are left untouched to avoid duplication bugs.
     func removeTextCalEvents(for date: Date) {
         guard let cal = getOrCreateCalendar() else { return }
-        let dayEvents = events(for: date).filter { $0.calendar.calendarIdentifier == cal.calendarIdentifier }
+        removeManagedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
+    }
+
+    /// Remove non-recurring events for a given date in the specified calendar.
+    func removeManagedEvents(for date: Date, calendarIdentifier: String) {
+        let dayEvents = events(for: date).filter { $0.calendar.calendarIdentifier == calendarIdentifier }
         for event in dayEvents {
             if event.hasRecurrenceRules {
                 continue  // skip recurring occurrences
@@ -143,7 +165,12 @@ actor EventKitManager {
     /// Fetch TextCal events for a specific date
     func textCalEvents(for date: Date) -> [EKEvent] {
         guard let cal = getOrCreateCalendar() else { return [] }
-        return events(for: date).filter { $0.calendar.calendarIdentifier == cal.calendarIdentifier }
+        return managedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
+    }
+
+    /// Fetch events for a specific date in the specified calendar
+    func managedEvents(for date: Date, calendarIdentifier: String) -> [EKEvent] {
+        events(for: date).filter { $0.calendar.calendarIdentifier == calendarIdentifier }
     }
 
     /// Check if the user has granted calendar access

@@ -29,6 +29,7 @@ enum TimePatterns {
 
         var minute = 0
         if parts.count > 1, let m = Int(parts[1]) {
+            guard m >= 0 && m < 60 else { return nil }
             minute = m
         }
 
@@ -39,6 +40,8 @@ enum TimePatterns {
                 hour = 0
             }
         }
+
+        guard hour >= 0 && hour < 24 else { return nil }
 
         return DateComponents(hour: hour, minute: minute)
     }

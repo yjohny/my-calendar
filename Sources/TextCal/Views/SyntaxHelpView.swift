@@ -28,6 +28,12 @@ struct SyntaxHelpView: View {
                         ("Had a productive morning.", "Plain text = journal entry"),
                     ])
 
+                    syntaxSection("Calendar Override", examples: [
+                        ("[Work] 9:00 AM - Standup", "Add to Work calendar"),
+                        ("[Personal] * Birthday", "All-day on Personal calendar"),
+                        ("3:00 PM - Meeting", "Uses your default calendar"),
+                    ])
+
                     syntaxSection("Repeating Events", examples: [
                         ("9:00 AM - Standup (every weekday)", "Mon–Fri"),
                         ("* Take vitamins (daily)", "Every day"),

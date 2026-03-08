@@ -1,5 +1,6 @@
 import EventKit
 import Foundation
+import SwiftUI
 
 /// Converts between our text-based event format and EventKit objects
 enum EventKitSync {
@@ -13,6 +14,20 @@ enum EventKitSync {
         } else {
             return timedLine(from: event)
         }
+    }
+
+    /// Render an EKEvent as a text line, prepending `[CalendarTitle]` if it's not the default calendar.
+    static func textLine(from event: EKEvent, defaultCalendarId: String?) -> String {
+        let line = textLine(from: event)
+        if let defaultId = defaultCalendarId, event.calendar.calendarIdentifier != defaultId {
+            return "[\(event.calendar.title)] \(line)"
+        }
+        return line
+    }
+
+    /// Extract the calendar's color as a SwiftUI Color
+    static func calendarColor(from event: EKEvent) -> Color {
+        Color(cgColor: event.calendar.cgColor)
     }
 
     private static func allDayLine(from event: EKEvent) -> String {
@@ -62,12 +77,17 @@ enum EventKitSync {
 
         switch rule.frequency {
         case .daily:
-            if rule.daysOfTheWeek?.count == 5 {
-                return "(every weekday)"
-            }
             return "(daily)"
 
         case .weekly:
+            if let days = rule.daysOfTheWeek, days.count == 5 {
+                // Mon-Fri weekday rule (created as .weekly with 5 days)
+                let weekdayValues = Set(days.map { $0.dayOfTheWeek.rawValue })
+                let monToFri = Set([EKWeekday.monday.rawValue, .tuesday.rawValue, .wednesday.rawValue, .thursday.rawValue, .friday.rawValue])
+                if weekdayValues == monToFri {
+                    return "(every weekday)"
+                }
+            }
             if let days = rule.daysOfTheWeek, days.count == 1 {
                 let dayNames = ["", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
                 let dayIndex = days[0].dayOfTheWeek.rawValue

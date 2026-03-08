@@ -1,3 +1,4 @@
+import EventKit
 import SwiftUI
 
 struct CalendarDocumentView: View {
@@ -5,6 +6,9 @@ struct CalendarDocumentView: View {
     @State private var viewModel = CalendarViewModel()
     @State private var showingSyntaxHelp = false
     @State private var showingDatePicker = false
+    @State private var showingCalendarPicker = false
+    @State private var writableCalendars: [EKCalendar] = []
+    @State private var defaultCalendarId: String?
     @State private var pickerDate = DateFormatting.today
 
     var body: some View {
@@ -60,6 +64,16 @@ struct CalendarDocumentView: View {
             HelpButtonOverlay {
                 showingSyntaxHelp = true
             }
+
+            CalendarButtonOverlay {
+                Task {
+                    if let ekManager = store.eventKitManager {
+                        writableCalendars = await ekManager.writableCalendars()
+                    }
+                    defaultCalendarId = store.calendarSettings?.defaultCalendarIdentifier
+                    showingCalendarPicker = true
+                }
+            }
         }
         .background(Color(.systemBackground))
         .sheet(isPresented: $showingSyntaxHelp) {
@@ -68,6 +82,15 @@ struct CalendarDocumentView: View {
         .sheet(isPresented: $showingDatePicker) {
             DateJumpPicker(selectedDate: $pickerDate) { date in
                 viewModel.jumpTo(date: date)
+            }
+        }
+        .sheet(isPresented: $showingCalendarPicker) {
+            CalendarPickerView(
+                calendars: writableCalendars,
+                selectedIdentifier: $defaultCalendarId
+            )
+            .onDisappear {
+                store.calendarSettings?.defaultCalendarIdentifier = defaultCalendarId
             }
         }
     }
