@@ -15,14 +15,14 @@ struct EventLineInfo: Equatable {
 @MainActor
 @Observable
 final class CalendarStore {
-    /// Journal text per date (only freeform text, not events)
-    private(set) var journals: [Date: String] = [:]
+    /// Full interleaved text per date (events + journal mixed, in user's order)
+    private(set) var dayTexts: [Date: String] = [:]
 
-    /// Cached event lines per date (rendered from EventKit), with calendar colors
-    private(set) var eventLineInfos: [Date: [EventLineInfo]] = [:]
+    /// Color lookup for event lines: maps (title, hour, minute) → Color from EventKit
+    private(set) var eventColorMap: [Date: [EventColorKey: Color]] = [:]
 
-    /// Plain event lines for backwards compatibility (display text, edit mode)
-    private(set) var eventLines: [Date: [String]] = [:]
+    /// EventKit-only events not yet in the user's text (added from other apps)
+    private(set) var unmatchedEventLines: [Date: [EventLineInfo]] = [:]
 
     /// Whether EventKit access has been granted
     private(set) var hasCalendarAccess = false
@@ -31,6 +31,12 @@ final class CalendarStore {
     private var fileStore: FileStore?
     private var coalescer: ChangeCoalescer?
     private(set) var calendarSettings: CalendarSettings?
+
+    // Keep legacy properties for compatibility during transition
+    private(set) var eventLineInfos: [Date: [EventLineInfo]] = [:]
+    private(set) var eventLines: [Date: [String]] = [:]
+    /// Journal text per date (only freeform text, not events) — kept for migration
+    private(set) var journals: [Date: String] = [:]
 
     init() {}
 
@@ -49,11 +55,12 @@ final class CalendarStore {
             hasCalendarAccess = await ekManager.requestAccess()
         }
 
-        // Load journal text from per-day files
+        // Load day texts from per-day files
         if let fileStore {
             do {
                 let allJournals = try await fileStore.loadAllJournals()
                 for (date, text) in allJournals {
+                    dayTexts[date] = text
                     journals[date] = text
                 }
             } catch {
@@ -67,63 +74,141 @@ final class CalendarStore {
 
     // MARK: - Reading
 
-    /// Get the combined display text for a date: event lines + journal text
+    /// Get the full display text for a date (interleaved events + journal in user order)
     func displayText(for date: Date) -> String {
         let key = DateFormatting.normalizeToDay(date)
-        let events = eventLines[key] ?? []
-        let journal = journals[key] ?? ""
+        let userText = dayTexts[key] ?? ""
+        let unmatched = unmatchedEventLines[key] ?? []
 
+        if unmatched.isEmpty {
+            return userText
+        }
+
+        // Append EventKit-only events (from other apps) below user's text
         var parts: [String] = []
-        if !events.isEmpty {
-            parts.append(events.joined(separator: "\n"))
+        if !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(userText)
         }
-        if !journal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            parts.append(journal)
-        }
+        let unmatchedText = unmatched.map(\.text).joined(separator: "\n")
+        parts.append(unmatchedText)
         return parts.joined(separator: "\n")
     }
 
-    /// Get just the journal text for a date
+    /// Get just the journal text for a date (legacy compatibility)
     func journalText(for date: Date) -> String {
         let key = DateFormatting.normalizeToDay(date)
         return journals[key] ?? ""
     }
 
-    /// Get the event lines for a date (from EventKit)
+    /// Get the event lines for a date (from EventKit) — legacy compatibility
     func eventLinesForDate(_ date: Date) -> [String] {
         let key = DateFormatting.normalizeToDay(date)
         return eventLines[key] ?? []
     }
 
-    /// Get event line infos (with calendar colors) for a date
+    /// Get event line infos (with calendar colors) for a date — legacy compatibility
     func eventLineInfosForDate(_ date: Date) -> [EventLineInfo] {
         let key = DateFormatting.normalizeToDay(date)
         return eventLineInfos[key] ?? []
     }
 
-    /// Refresh event lines from EventKit for a specific date
+    /// Get the color map for a date (used by StyledTextView to color event lines)
+    func colorMap(for date: Date) -> [EventColorKey: Color] {
+        let key = DateFormatting.normalizeToDay(date)
+        return eventColorMap[key] ?? [:]
+    }
+
+    /// Get unmatched EventKit events for a date
+    func unmatchedEvents(for date: Date) -> [EventLineInfo] {
+        let key = DateFormatting.normalizeToDay(date)
+        return unmatchedEventLines[key] ?? []
+    }
+
+    /// Refresh event data from EventKit for a specific date.
+    /// Builds the color map and identifies unmatched events.
     func refreshEvents(for date: Date) async {
         guard let ekManager = eventKitManager, hasCalendarAccess else { return }
         let key = DateFormatting.normalizeToDay(date)
         let ekEvents = await ekManager.events(for: key)
         let defaultCalId = await resolveDefaultCalendarId()
 
-        var lines: [String] = []
-        var infos: [EventLineInfo] = []
+        var colorMap: [EventColorKey: Color] = [:]
+        var allInfos: [EventLineInfo] = []
+        var allLines: [String] = []
+
         for event in ekEvents {
             let line = EventKitSync.textLine(from: event, defaultCalendarId: defaultCalId)
             let color = EventKitSync.calendarColor(from: event)
-            lines.append(line)
-            infos.append(EventLineInfo(text: line, calendarColor: color))
+            allLines.append(line)
+            allInfos.append(EventLineInfo(text: line, calendarColor: color))
+
+            // Build color key from EventKit event
+            let cal = Calendar.current
+            let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
+            let colorKey = EventColorKey(
+                title: event.title ?? "",
+                hour: comps.hour,
+                minute: comps.minute,
+                isAllDay: event.isAllDay
+            )
+            colorMap[colorKey] = color
 
             let noteLines = EventKitSync.noteLines(from: event)
             for note in noteLines {
-                lines.append(note)
-                infos.append(EventLineInfo(text: note, calendarColor: color))
+                allLines.append(note)
+                allInfos.append(EventLineInfo(text: note, calendarColor: color))
             }
         }
-        eventLines[key] = lines.isEmpty ? nil : lines
-        eventLineInfos[key] = infos.isEmpty ? nil : infos
+
+        eventColorMap[key] = colorMap
+        eventLines[key] = allLines.isEmpty ? nil : allLines
+        eventLineInfos[key] = allInfos.isEmpty ? nil : allInfos
+
+        // Find EventKit events not represented in user's text
+        let userText = dayTexts[key] ?? ""
+        let userLines = userText.components(separatedBy: "\n")
+        var userEventKeys = Set<EventColorKey>()
+
+        for line in userLines {
+            let parsed = LineParser.parse(line)
+            switch parsed {
+            case .event(let time, _, let title, _, _):
+                userEventKeys.insert(EventColorKey(
+                    title: title,
+                    hour: time.hour,
+                    minute: time.minute,
+                    isAllDay: false
+                ))
+            case .allDay(let title, _, _):
+                userEventKeys.insert(EventColorKey(
+                    title: title,
+                    hour: nil,
+                    minute: nil,
+                    isAllDay: true
+                ))
+            default:
+                break
+            }
+        }
+
+        var unmatched: [EventLineInfo] = []
+        for event in ekEvents {
+            let cal = Calendar.current
+            let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
+            let ek = EventColorKey(
+                title: event.title ?? "",
+                hour: comps.hour,
+                minute: comps.minute,
+                isAllDay: event.isAllDay
+            )
+            if !userEventKeys.contains(ek) {
+                let line = EventKitSync.textLine(from: event, defaultCalendarId: defaultCalId)
+                let color = EventKitSync.calendarColor(from: event)
+                unmatched.append(EventLineInfo(text: line, calendarColor: color))
+            }
+        }
+
+        unmatchedEventLines[key] = unmatched.isEmpty ? nil : unmatched
     }
 
     /// Resolve the default calendar identifier: user setting → TextCal fallback
@@ -143,13 +228,44 @@ final class CalendarStore {
 
     // MARK: - Writing
 
-    /// Update from the text editor. Parses the full text, separates events from journal,
-    /// writes events to EventKit and journal to file storage.
+    /// Update from the text editor. Saves full interleaved text, parses events for EventKit sync.
     func update(date: Date, text: String) {
         let key = DateFormatting.normalizeToDay(date)
         let lines = text.components(separatedBy: "\n")
 
-        var journalLines: [String] = []
+        // Save the full interleaved text as-is (preserving user's layout order)
+        let trimmed = text.trimmingCharacters(in: .newlines)
+        if trimmed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            dayTexts.removeValue(forKey: key)
+            journals.removeValue(forKey: key)
+        } else {
+            dayTexts[key] = trimmed
+            // Also extract journal-only lines for legacy compatibility
+            var journalLines: [String] = []
+            for line in lines {
+                let parsed = LineParser.parse(line)
+                switch parsed {
+                case .event, .allDay:
+                    break
+                case .eventNote:
+                    break
+                default:
+                    journalLines.append(line)
+                }
+            }
+            let journalText = journalLines.joined(separator: "\n")
+                .trimmingCharacters(in: .newlines)
+            if journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                journals.removeValue(forKey: key)
+            } else {
+                journals[key] = journalText
+            }
+        }
+
+        // Save the full text to file (interleaved)
+        scheduleDayTextSave(date: key, text: trimmed)
+
+        // Parse events for EventKit sync
         var parsedEvents: [ParsedEventGroup] = []
         var currentEvent: ParsedEventGroup?
 
@@ -187,41 +303,19 @@ final class CalendarStore {
             case .eventNote(let noteText):
                 if currentEvent != nil {
                     currentEvent?.notes.append(noteText)
-                } else {
-                    journalLines.append(line)
                 }
 
-            case .journal:
+            case .journal, .blank:
                 if let pending = currentEvent {
                     parsedEvents.append(pending)
                     currentEvent = nil
                 }
-                journalLines.append(line)
-
-            case .blank:
-                if let pending = currentEvent {
-                    parsedEvents.append(pending)
-                    currentEvent = nil
-                }
-                journalLines.append(line)
             }
         }
 
         if let pending = currentEvent {
             parsedEvents.append(pending)
         }
-
-        // Update journal text
-        let journalText = journalLines.joined(separator: "\n")
-            .trimmingCharacters(in: .newlines)
-        if journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            journals.removeValue(forKey: key)
-        } else {
-            journals[key] = journalText
-        }
-
-        // Save journal to file
-        scheduleJournalSave(date: key, text: journalText)
 
         // Write events to EventKit
         if hasCalendarAccess && !parsedEvents.isEmpty {
@@ -239,16 +333,18 @@ final class CalendarStore {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             journals.removeValue(forKey: key)
+            dayTexts.removeValue(forKey: key)
         } else {
             journals[key] = text
+            dayTexts[key] = text
         }
-        scheduleJournalSave(date: key, text: text)
+        scheduleDayTextSave(date: key, text: text)
     }
 
     /// Force an immediate save (e.g., on app background)
     func forceSave() async {
         guard let fileStore else { return }
-        for (date, text) in journals {
+        for (date, text) in dayTexts {
             try? await fileStore.saveJournal(text, for: date)
         }
     }
@@ -296,8 +392,6 @@ final class CalendarStore {
         }
 
         // --- Override calendars: create-only (never delete events we don't own) ---
-        // For non-default calendars, we only ADD events. We skip if an event with
-        // the same title and time already exists (to avoid duplicates).
         for (event, cal) in overrideEvents {
             let existingInCal = await ekManager.managedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
             if matchesExistingEvent(event, existing: existingInCal, date: date) {
@@ -384,7 +478,7 @@ final class CalendarStore {
 
     // MARK: - Persistence
 
-    private func scheduleJournalSave(date: Date, text: String) {
+    private func scheduleDayTextSave(date: Date, text: String) {
         guard let coalescer, let fileStore else { return }
         Task {
             await coalescer.enqueue {
@@ -405,30 +499,11 @@ final class CalendarStore {
             let (entries, _, _) = DocumentSerializer.deserialize(content)
 
             for entry in entries where !entry.isEmpty {
-                let lines = entry.rawText.components(separatedBy: "\n")
-                var journalLines: [String] = []
-
-                for line in lines {
-                    let parsed = LineParser.parse(line)
-                    switch parsed {
-                    case .event, .allDay:
-                        // Events will be re-entered by the user or could be bulk-imported
-                        // For now, preserve them as journal text during migration
-                        journalLines.append(line)
-                    case .eventNote:
-                        journalLines.append(line)
-                    case .journal:
-                        journalLines.append(line)
-                    case .blank:
-                        journalLines.append(line)
-                    }
-                }
-
-                let journalText = journalLines.joined(separator: "\n")
-                    .trimmingCharacters(in: .newlines)
-                if !journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    journals[entry.id] = journalText
-                    try await fileStore.saveJournal(journalText, for: entry.id)
+                let text = entry.rawText.trimmingCharacters(in: .newlines)
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    dayTexts[entry.id] = text
+                    journals[entry.id] = text
+                    try await fileStore.saveJournal(text, for: entry.id)
                 }
             }
 
@@ -437,6 +512,14 @@ final class CalendarStore {
             // Migration failed — leave legacy file in place
         }
     }
+}
+
+/// Key for matching event lines to EventKit calendar colors
+struct EventColorKey: Hashable {
+    let title: String
+    let hour: Int?
+    let minute: Int?
+    let isAllDay: Bool
 }
 
 /// A group of parsed event data ready to write to EventKit

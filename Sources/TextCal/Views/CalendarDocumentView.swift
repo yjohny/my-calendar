@@ -12,70 +12,85 @@ struct CalendarDocumentView: View {
     @State private var pickerDate = DateFormatting.today
 
     var body: some View {
-        ZStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(viewModel.dates, id: \.self) { date in
-                            DaySectionView(date: date) {
-                                pickerDate = date
-                                showingDatePicker = true
-                            }
-                            .id(date)
-                            .onAppear {
-                                viewModel.expandIfNeeded(visibleDate: date)
+        NavigationStack {
+            ZStack {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(viewModel.dates, id: \.self) { date in
+                                DaySectionView(date: date) {
+                                    pickerDate = date
+                                    showingDatePicker = true
+                                }
+                                .id(date)
+                                .onAppear {
+                                    viewModel.expandIfNeeded(visibleDate: date)
+                                }
                             }
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                }
-                .defaultScrollAnchor(.center)
-                .onAppear {
-                    DispatchQueue.main.async {
-                        proxy.scrollTo(DateFormatting.today, anchor: .top)
-                    }
-                }
-                .onChange(of: viewModel.scrollTarget) { _, target in
-                    if let target {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            proxy.scrollTo(target, anchor: .top)
+                    .defaultScrollAnchor(.center)
+                    .onAppear {
+                        DispatchQueue.main.async {
+                            proxy.scrollTo(DateFormatting.today, anchor: .top)
                         }
-                        viewModel.scrollTarget = nil
+                    }
+                    .onChange(of: viewModel.scrollTarget) { _, target in
+                        if let target {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo(target, anchor: .top)
+                            }
+                            viewModel.scrollTarget = nil
+                        }
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                        Task { await store.forceSave() }
                     }
                 }
-                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-                    Task { await store.forceSave() }
+
+                // Date scrubber on right edge
+                DateScrubber(
+                    startDate: viewModel.startDate,
+                    endDate: viewModel.endDate
+                ) { date in
+                    viewModel.jumpTo(date: date)
                 }
             }
-
-            // Date scrubber on right edge
-            DateScrubber(
-                startDate: viewModel.startDate,
-                endDate: viewModel.endDate
-            ) { date in
-                viewModel.jumpTo(date: date)
-            }
-
-            // Floating buttons
-            TodayButtonOverlay {
-                viewModel.scrollToToday()
-            }
-
-            HelpButtonOverlay {
-                showingSyntaxHelp = true
-            }
-
-            CalendarButtonOverlay {
-                Task {
-                    if let ekManager = store.eventKitManager {
-                        writableCalendars = await ekManager.writableCalendars()
+            .toolbar {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button {
+                        viewModel.scrollToToday()
+                    } label: {
+                        Label("Today", systemImage: "calendar.badge.clock")
                     }
-                    defaultCalendarId = store.calendarSettings?.defaultCalendarIdentifier
-                    showingCalendarPicker = true
+
+                    Spacer()
+
+                    Button {
+                        Task {
+                            if let ekManager = store.eventKitManager {
+                                writableCalendars = await ekManager.writableCalendars()
+                            }
+                            defaultCalendarId = store.calendarSettings?.defaultCalendarIdentifier
+                            showingCalendarPicker = true
+                        }
+                    } label: {
+                        Label("Calendars", systemImage: "calendar")
+                    }
+
+                    Spacer()
+
+                    Button {
+                        showingSyntaxHelp = true
+                    } label: {
+                        Label("Help", systemImage: "questionmark.circle")
+                    }
                 }
             }
+            .toolbarBackground(.visible, for: .bottomBar)
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .background(Color(.systemBackground))
         .sheet(isPresented: $showingSyntaxHelp) {
             SyntaxHelpView()
         }

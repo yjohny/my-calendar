@@ -1,25 +1,27 @@
 import SwiftUI
 
-/// Displays day text with subtle styling: event lines get a color accent on the time portion
+/// Displays day text with styling: event lines get color accents, journal text is plain.
+/// Lines render in document order (interleaved events + journal).
 struct StyledTextView: View {
     let text: String
-    var eventLineInfos: [EventLineInfo] = []
+    var colorMap: [EventColorKey: Color] = [:]
+    var unmatchedEvents: [EventLineInfo] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            // Show EventKit events first
-            ForEach(Array(eventLineInfos.enumerated()), id: \.offset) { _, info in
-                styledLine(info.text, isFromEventKit: true, calendarColor: info.calendarColor)
-            }
-            // Then show journal text
+            // Render user's text in document order
             ForEach(Array(text.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
-                styledLine(line, isFromEventKit: false, calendarColor: nil)
+                styledLine(line)
+            }
+            // Append any EventKit events not in user's text
+            ForEach(Array(unmatchedEvents.enumerated()), id: \.offset) { _, info in
+                styledLine(info.text, overrideColor: info.calendarColor)
             }
         }
     }
 
     @ViewBuilder
-    private func styledLine(_ line: String, isFromEventKit: Bool, calendarColor: Color?) -> some View {
+    private func styledLine(_ line: String, overrideColor: Color? = nil) -> some View {
         // Strip [CalendarName] suffix/prefix for display (we show color instead)
         let (displayLine, calName) = stripCalendarPrefix(line)
 
@@ -28,9 +30,15 @@ struct StyledTextView: View {
                 .font(.system(.body, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if let match = LineParser.parseAllDayLine(displayLine) {
-            allDayView(match: match, isFromEventKit: isFromEventKit, calendarColor: calendarColor, calendarName: calName)
+            let color = overrideColor ?? lookupColor(title: match.title, isAllDay: true) ?? Color.orange
+            allDayView(match: match, calendarColor: color, calendarName: calName)
         } else if let match = LineParser.parseEventLine(displayLine) {
-            eventView(match: match, isFromEventKit: isFromEventKit, calendarColor: calendarColor, calendarName: calName)
+            let color = overrideColor ?? lookupColor(
+                title: match.title,
+                hour: match.timeComponents.hour,
+                minute: match.timeComponents.minute
+            ) ?? Color.accentColor
+            eventView(match: match, calendarColor: color, calendarName: calName)
         } else if displayLine.hasPrefix("  ") {
             Text(displayLine)
                 .font(.system(.body, design: .rounded))
@@ -41,6 +49,12 @@ struct StyledTextView: View {
                 .font(.system(.body, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Look up calendar color from EventKit color map
+    private func lookupColor(title: String, hour: Int? = nil, minute: Int? = nil, isAllDay: Bool = false) -> Color? {
+        let key = EventColorKey(title: title, hour: hour, minute: minute, isAllDay: isAllDay)
+        return colorMap[key]
     }
 
     /// Strip `[CalendarName]` suffix or prefix from a line for display purposes
@@ -57,12 +71,11 @@ struct StyledTextView: View {
     }
 
     @ViewBuilder
-    private func allDayView(match: AllDayMatch, isFromEventKit: Bool, calendarColor: Color? = nil, calendarName: String? = nil) -> some View {
-        let starColor = calendarColor ?? Color.orange
+    private func allDayView(match: AllDayMatch, calendarColor: Color, calendarName: String? = nil) -> some View {
         let result: Text = {
             var t = Text("★ ")
                 .font(.system(.body, design: .rounded))
-                .foregroundStyle(starColor)
+                .foregroundStyle(calendarColor)
             + Text(match.title)
                 .font(.system(.body, design: .rounded))
                 .fontWeight(.medium)
@@ -83,22 +96,21 @@ struct StyledTextView: View {
     }
 
     @ViewBuilder
-    private func eventView(match: EventLineMatch, isFromEventKit: Bool, calendarColor: Color? = nil, calendarName: String? = nil) -> some View {
-        let timeColor = calendarColor ?? Color.accentColor
+    private func eventView(match: EventLineMatch, calendarColor: Color, calendarName: String? = nil) -> some View {
         let result: Text = {
             var t = Text(match.timeText)
                 .font(.system(.body, design: .monospaced))
                 .fontWeight(.medium)
-                .foregroundStyle(timeColor)
+                .foregroundStyle(calendarColor)
 
             if let endTime = match.endTimeText {
                 t = t + Text("–")
                     .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(timeColor.opacity(0.7))
+                    .foregroundStyle(calendarColor.opacity(0.7))
                 + Text(endTime)
                     .font(.system(.body, design: .monospaced))
                     .fontWeight(.medium)
-                    .foregroundStyle(timeColor.opacity(0.7))
+                    .foregroundStyle(calendarColor.opacity(0.7))
             }
 
             t = t + Text(match.separator + match.title)
