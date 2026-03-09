@@ -8,7 +8,7 @@ struct CalendarPickerView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 ForEach(calendars, id: \EKCalendar.calendarIdentifier) { (calendar: EKCalendar) in
                 Button {

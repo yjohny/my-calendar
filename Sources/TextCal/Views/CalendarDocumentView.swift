@@ -57,8 +57,8 @@ struct CalendarDocumentView: View {
                     viewModel.jumpTo(date: date)
                 }
             }
-            .toolbar {
-                ToolbarItemGroup(placement: .bottomBar) {
+            .safeAreaInset(edge: .bottom) {
+                HStack {
                     Button {
                         viewModel.scrollToToday()
                     } label: {
@@ -87,8 +87,10 @@ struct CalendarDocumentView: View {
                         Label("Help", systemImage: "questionmark.circle")
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(.bar)
             }
-            .toolbarBackground(.visible, for: .bottomBar)
             .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(isPresented: $showingSyntaxHelp) {
