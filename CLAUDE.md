@@ -14,7 +14,7 @@ Xcode project: `TextCal.xcodeproj`
 - **Models/CalendarStore.swift** — Main `@Observable` store. Manages `dayTexts` (full interleaved text per date — events and journal mixed in user's order) and `eventColorMap` (calendar colors from EventKit keyed by title+time). Parses user text, syncs events to EventKit, stores full text to file preserving layout order. Events and journal text can be freely interleaved.
 - **Parsing/** — `LineParser` parses lines into `.event`, `.allDay`, `.eventNote`, `.journal`, `.blank`. `TimePatterns` has regex for time formats and recurrence markers.
 - **Persistence/** — `EventKitManager` (actor) wraps EKEventStore CRUD. `EventKitSync` converts between text lines and `EKEvent` objects. `FileStore` (actor) handles per-day text files. `ChangeCoalescer` debounces saves.
-- **Views/** — SwiftUI views. `DayTextEditor` toggles between styled display (`StyledTextView`) and edit mode (`TextEditor`). `NavigationStack` with bottom toolbar for Today/Calendars/Help. `DateScrubber` on right edge.
+- **Views/** — SwiftUI views. `DayTextEditor` toggles between styled display (`StyledTextView`) and edit mode (`TextEditor`). `NavigationStack` with a `.safeAreaInset(edge: .bottom)` bar for Today/Calendars/Help. `DateScrubber` on right edge.
 
 ## Key Patterns
 - Uses rounded (SF Rounded) fonts throughout for a softer, modern feel. Monospaced is used only for time portions in event lines (e.g., `9:00 AM`) to maintain clean tabular alignment.
@@ -34,5 +34,5 @@ Xcode project: `TextCal.xcodeproj`
 - **All-day events**: EventKit requires all-day event `endDate` to be the start of the *next* day, not the same day as `startDate`.
 - **DayTextEditor refresh**: Uses a cancellable `refreshTask` to prevent stale async results from overwriting current state when the user scrolls quickly between dates.
 - **StyledTextView**: Uses concatenated `Text` views (not `HStack`) so long event names wrap to the next line naturally.
-- **Toolbar**: Today, Calendars, and Help are in a standard iOS bottom toolbar (`NavigationStack` + `ToolbarItemGroup(.bottomBar)`), replacing the old floating overlay buttons.
+- **Bottom bar**: Today, Calendars, and Help buttons use `.safeAreaInset(edge: .bottom)` with an `HStack` and `.background(.bar)` — not `ToolbarItemGroup(.bottomBar)`, which causes UIKit to inject its own toolbar into the hosting controller view hierarchy, triggering unsatisfiable-constraint warnings.
 - **SwiftUI List with non-Identifiable types**: When using `EKCalendar` or other non-`Identifiable` EventKit types in a `List`, use `List { ForEach(items, id: \.keyPath) { ... } }` instead of `List(items, id: \.keyPath) { ... }`. The direct `List` initializer fails to infer generic parameters for these types, causing cascading build errors. Additionally, always fully qualify the key path root type *and* the closure parameter type in `ForEach` (e.g., `ForEach(calendars, id: \EKCalendar.calendarIdentifier) { (calendar: EKCalendar) in`), otherwise Swift cannot infer the generic parameters and produces cascading type errors.
