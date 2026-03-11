@@ -476,6 +476,32 @@ final class CalendarStore {
         return false
     }
 
+    // MARK: - Search
+
+    /// Search result for a single day
+    struct SearchResult {
+        let date: Date
+        let matchingLines: [String]
+    }
+
+    /// Search all day texts for lines containing the query (case-insensitive).
+    /// Returns results sorted by date descending (most recent first).
+    func searchDayTexts(query: String) -> [SearchResult] {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        let lowered = query.lowercased()
+        var results: [SearchResult] = []
+
+        for (date, text) in dayTexts {
+            let lines = text.components(separatedBy: "\n")
+            let matching = lines.filter { $0.lowercased().contains(lowered) }
+            if !matching.isEmpty {
+                results.append(SearchResult(date: date, matchingLines: matching))
+            }
+        }
+
+        return results.sorted { $0.date > $1.date }
+    }
+
     // MARK: - Persistence
 
     private func scheduleDayTextSave(date: Date, text: String) {

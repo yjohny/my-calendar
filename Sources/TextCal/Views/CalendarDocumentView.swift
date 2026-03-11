@@ -5,6 +5,7 @@ struct CalendarDocumentView: View {
     @Environment(CalendarStore.self) private var store
     @State private var viewModel = CalendarViewModel()
     @State private var showingSyntaxHelp = false
+    @State private var showingSearch = false
     @State private var showingDatePicker = false
     @State private var showingCalendarPicker = false
     @State private var writableCalendars: [EKCalendar] = []
@@ -68,6 +69,14 @@ struct CalendarDocumentView: View {
                     Spacer()
 
                     Button {
+                        showingSearch = true
+                    } label: {
+                        Label("Search", systemImage: "magnifyingglass")
+                    }
+
+                    Spacer()
+
+                    Button {
                         Task {
                             if let ekManager = store.eventKitManager {
                                 writableCalendars = await ekManager.writableCalendars()
@@ -90,6 +99,11 @@ struct CalendarDocumentView: View {
             }
             .toolbarBackground(.visible, for: .bottomBar)
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .sheet(isPresented: $showingSearch) {
+            SearchView { date in
+                viewModel.jumpTo(date: date)
+            }
         }
         .sheet(isPresented: $showingSyntaxHelp) {
             SyntaxHelpView()
