@@ -14,7 +14,7 @@ Xcode project: `TextCal.xcodeproj`
 - **Models/CalendarStore.swift** — Main `@Observable` store. Manages `dayTexts` (full interleaved text per date — events and journal mixed in user's order) and `eventColorMap` (calendar colors from EventKit keyed by title+time). Parses user text, syncs events to EventKit, stores full text to file preserving layout order. Events and journal text can be freely interleaved.
 - **Parsing/** — `LineParser` parses lines into `.event`, `.allDay`, `.eventNote`, `.journal`, `.blank`. `TimePatterns` has regex for time formats and recurrence markers.
 - **Persistence/** — `EventKitManager` (actor) wraps EKEventStore CRUD. `EventKitSync` converts between text lines and `EKEvent` objects. `FileStore` (actor) handles per-day text files. `ChangeCoalescer` debounces saves.
-- **Views/** — SwiftUI views. `DayTextEditor` toggles between styled display (`StyledTextView`) and edit mode (`TextEditor`). `NavigationStack` with bottom toolbar for Today/Calendars/Help. `DateScrubber` on right edge.
+- **Views/** — SwiftUI views. `DayTextEditor` toggles between styled display (`StyledTextView`) and edit mode (`TextEditor`). `NavigationStack` with bottom toolbar for Today/Search/Calendars/Help. `DateScrubber` on right edge. `SearchView` provides cross-day search.
 
 ## Key Patterns
 - Uses rounded (SF Rounded) fonts throughout for a softer, modern feel. Monospaced is used only for time portions in event lines (e.g., `9:00 AM`) to maintain clean tabular alignment.
@@ -34,5 +34,15 @@ Xcode project: `TextCal.xcodeproj`
 - **All-day events**: EventKit requires all-day event `endDate` to be the start of the *next* day, not the same day as `startDate`.
 - **DayTextEditor refresh**: Uses a cancellable `refreshTask` to prevent stale async results from overwriting current state when the user scrolls quickly between dates.
 - **StyledTextView**: Uses concatenated `Text` views (not `HStack`) so long event names wrap to the next line naturally.
-- **Toolbar**: Today, Calendars, and Help are in a standard iOS bottom toolbar (`NavigationStack` + `ToolbarItemGroup(.bottomBar)`), replacing the old floating overlay buttons.
+- **Toolbar**: Today, Search, Calendars, and Help are in a standard iOS bottom toolbar (`NavigationStack` + `ToolbarItemGroup(.bottomBar)`).
+- **Search**: `SearchView` searches `CalendarStore.searchDayTexts(query:)` across all in-memory `dayTexts`. Debounced 300ms via `.task(id:)`. Results grouped by date (most recent first) with query text highlighted. Tapping a result dismisses the sheet and calls `viewModel.jumpTo(date:)`.
+- **Default event duration**: Events without an explicit end time default to 1 hour in `EventKitManager.saveEvent()`. `EventKitSync.timedLine()` detects this default (duration == 3600s) and hides the end time when rendering back to text, preserving the user's original format.
 - **SwiftUI List with non-Identifiable types**: When using `EKCalendar` or other non-`Identifiable` EventKit types in a `List`, use `List { ForEach(items, id: \.keyPath) { ... } }` instead of `List(items, id: \.keyPath) { ... }`. The direct `List` initializer fails to infer generic parameters for these types, causing cascading build errors. Additionally, always fully qualify the key path root type *and* the closure parameter type in `ForEach` (e.g., `ForEach(calendars, id: \EKCalendar.calendarIdentifier) { (calendar: EKCalendar) in`), otherwise Swift cannot infer the generic parameters and produces cascading type errors.
+
+## Future Improvements
+- **Search: unit tests** — Add tests for `CalendarStore.searchDayTexts()` covering case-insensitivity, empty queries, multi-line matches, and date sorting.
+- **Search: EventKit events** — Currently search only covers `dayTexts` (user-typed text). Could also search unmatched EventKit events (from other apps) that haven't been typed into TextCal yet.
+- **Smarter text input** — Calendar name auto-complete when typing `[`, natural language shortcuts (e.g., "lunch tomorrow at noon"), or smart suggestions based on past events.
+- **Undo/redo** — SwiftUI `TextEditor` supports system undo, but `DayTextEditor.refreshState()` overwrites state on dismiss which can clear the undo stack. Wire up `UndoManager` properly.
+- **Accessibility** — VoiceOver labels for styled event lines, Dynamic Type support audit, reduce-motion alternatives for scroll animations.
+- **iPad keyboard shortcuts** — Cmd+F for search, Cmd+T for today, arrow keys for date navigation.
