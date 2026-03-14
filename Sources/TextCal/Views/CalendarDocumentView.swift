@@ -11,6 +11,7 @@ struct CalendarDocumentView: View {
     @State private var writableCalendars: [EKCalendar] = []
     @State private var defaultCalendarId: String?
     @State private var pickerDate = DateFormatting.today
+    @State private var currentVisibleDate = DateFormatting.today
 
     var body: some View {
         NavigationStack {
@@ -26,6 +27,7 @@ struct CalendarDocumentView: View {
                                 .id(date)
                                 .onAppear {
                                     viewModel.expandIfNeeded(visibleDate: date)
+                                    currentVisibleDate = date
                                 }
                             }
                         }
@@ -65,6 +67,7 @@ struct CalendarDocumentView: View {
                     } label: {
                         Label("Today", systemImage: "calendar.badge.clock")
                     }
+                    .keyboardShortcut("t", modifiers: .command)
 
                     Spacer()
 
@@ -73,6 +76,7 @@ struct CalendarDocumentView: View {
                     } label: {
                         Label("Search", systemImage: "magnifyingglass")
                     }
+                    .keyboardShortcut("f", modifiers: .command)
 
                     Spacer()
 
@@ -95,10 +99,34 @@ struct CalendarDocumentView: View {
                     } label: {
                         Label("Help", systemImage: "questionmark.circle")
                     }
+                    .keyboardShortcut("/", modifiers: .command)
                 }
             }
             .toolbarBackground(.visible, for: .bottomBar)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    if store.syncStatus != .idle {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.mini)
+                            Text(store.syncStatus == .saving ? "Saving..." : "Syncing...")
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundStyle(.secondary)
+                        }
+                        .transition(.opacity)
+                    }
+                }
+            }
+            .focusable()
+            .onKeyPress(.upArrow) {
+                navigateDay(offset: -1)
+                return .handled
+            }
+            .onKeyPress(.downArrow) {
+                navigateDay(offset: 1)
+                return .handled
+            }
         }
         .sheet(isPresented: $showingSearch) {
             SearchView { date in
@@ -121,6 +149,13 @@ struct CalendarDocumentView: View {
             .onDisappear {
                 store.calendarSettings?.defaultCalendarIdentifier = defaultCalendarId
             }
+        }
+    }
+
+    private func navigateDay(offset: Int) {
+        if let target = Calendar.current.date(byAdding: .day, value: offset, to: currentVisibleDate) {
+            viewModel.jumpTo(date: target)
+            currentVisibleDate = DateFormatting.normalizeToDay(target)
         }
     }
 }

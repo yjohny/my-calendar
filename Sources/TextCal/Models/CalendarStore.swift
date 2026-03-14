@@ -27,6 +27,14 @@ final class CalendarStore {
     /// Whether EventKit access has been granted
     private(set) var hasCalendarAccess = false
 
+    /// Sync status for UI feedback
+    enum SyncStatus: Equatable {
+        case idle
+        case saving
+        case syncing
+    }
+    private(set) var syncStatus: SyncStatus = .idle
+
     private(set) var eventKitManager: EventKitManager?
     private var fileStore: FileStore?
     private var coalescer: ChangeCoalescer?
@@ -134,7 +142,41 @@ final class CalendarStore {
         let key = DateFormatting.normalizeToDay(date)
         let ekEvents = await ekManager.events(for: key)
         let defaultCalId = await resolveDefaultCalendarId()
+        processEventsForDate(key, ekEvents: ekEvents, defaultCalId: defaultCalId)
+    }
 
+    /// Batch refresh events for a date range using a single EventKit query.
+    /// Much faster than calling refreshEvents(for:) per-date.
+    func refreshEventsInRange(from start: Date, to end: Date) async {
+        guard let ekManager = eventKitManager, hasCalendarAccess else { return }
+        let cal = Calendar.current
+        let normalizedStart = DateFormatting.normalizeToDay(start)
+        guard let rangeEnd = cal.date(byAdding: .day, value: 1, to: DateFormatting.normalizeToDay(end)) else { return }
+
+        let allEvents = await ekManager.events(from: normalizedStart, to: rangeEnd)
+        let defaultCalId = await resolveDefaultCalendarId()
+
+        // Group events by day
+        var eventsByDay: [Date: [EKEvent]] = [:]
+        for event in allEvents {
+            let dayKey = DateFormatting.normalizeToDay(event.startDate)
+            eventsByDay[dayKey, default: []].append(event)
+        }
+
+        // Process each day's events
+        var current = normalizedStart
+        let normalizedEnd = DateFormatting.normalizeToDay(end)
+        while current <= normalizedEnd {
+            let dayEvents = eventsByDay[current] ?? []
+            processEventsForDate(current, ekEvents: dayEvents, defaultCalId: defaultCalId)
+            guard let next = cal.date(byAdding: .day, value: 1, to: current) else { break }
+            current = next
+        }
+    }
+
+    /// Shared logic: process EventKit events for a single date, building color map + unmatched list.
+    private func processEventsForDate(_ key: Date, ekEvents: [EKEvent], defaultCalId: String?) {
+        let cal = Calendar.current
         var colorMap: [EventColorKey: Color] = [:]
         var allInfos: [EventLineInfo] = []
         var allLines: [String] = []
@@ -145,8 +187,6 @@ final class CalendarStore {
             allLines.append(line)
             allInfos.append(EventLineInfo(text: line, calendarColor: color))
 
-            // Build color key from EventKit event
-            let cal = Calendar.current
             let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
             let colorKey = EventColorKey(
                 title: event.title ?? "",
@@ -196,7 +236,6 @@ final class CalendarStore {
 
         var unmatched: [EventLineInfo] = []
         for event in ekEvents {
-            let cal = Calendar.current
             let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
             let ek = EventColorKey(
                 title: event.title ?? "",
@@ -312,6 +351,7 @@ final class CalendarStore {
         }
 
         // Save the full text to file (interleaved)
+        syncStatus = .saving
         scheduleDayTextSave(date: key, text: trimmed)
 
         // Write events to EventKit (debounced to avoid syncing on every keystroke)
@@ -321,8 +361,16 @@ final class CalendarStore {
             syncTask = Task {
                 try? await Task.sleep(for: .milliseconds(800))
                 guard !Task.isCancelled else { return }
+                syncStatus = .syncing
                 await syncEventsToEventKit(date: key, events: events)
                 await refreshEvents(for: key)
+                syncStatus = .idle
+            }
+        } else {
+            // No EventKit sync needed — mark idle after a short delay (file save is async)
+            Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                if syncStatus == .saving { syncStatus = .idle }
             }
         }
     }

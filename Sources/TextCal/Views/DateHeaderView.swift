@@ -25,6 +25,12 @@ struct DateHeaderView: View {
                     .background(Color.accentColor, in: Capsule())
             }
 
+            if onTap != nil {
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
             Spacer()
         }
         .padding(.horizontal, 16)

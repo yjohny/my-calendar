@@ -18,19 +18,21 @@ struct DaySectionView: View {
         }
     }
 
-    /// Prefetch EventKit data for adjacent days so they're ready when the user scrolls
+    /// Prefetch EventKit data for nearby days in a single batch query
     private func prefetchNearbyDates() {
         let calendar = Calendar.current
+        guard let rangeStart = calendar.date(byAdding: .day, value: -1, to: date),
+              let rangeEnd = calendar.date(byAdding: .day, value: 2, to: date) else { return }
+
+        // Skip if all dates in range are already loaded
+        let startKey = DateFormatting.normalizeToDay(rangeStart)
+        let endKey = DateFormatting.normalizeToDay(rangeEnd)
+        if store.eventColorMap[startKey] != nil && store.eventColorMap[endKey] != nil {
+            return
+        }
+
         Task {
-            for offset in [-1, 1, 2] {
-                if let nearby = calendar.date(byAdding: .day, value: offset, to: date) {
-                    let key = DateFormatting.normalizeToDay(nearby)
-                    // Only prefetch if we haven't loaded color data for this date yet
-                    if store.eventColorMap[key] == nil {
-                        await store.refreshEvents(for: key)
-                    }
-                }
-            }
+            await store.refreshEventsInRange(from: rangeStart, to: rangeEnd)
         }
     }
 }
