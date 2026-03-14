@@ -10,10 +10,20 @@ struct DateScrubber: View {
     @State private var isDragging = false
     @State private var dragProgress: CGFloat = 0.5
     @State private var currentLabel = ""
+    @State private var lastMonth = -1  // track month for haptic feedback
+    @State private var cachedMonthProgresses: [CGFloat] = []
+    @State private var cachedStartDate: Date?
+    @State private var cachedEndDate: Date?
 
     private let calendar = Calendar.current
     private let trackWidth: CGFloat = 32
     private let knobHeight: CGFloat = 40
+
+    private static let labelFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM yyyy"
+        return f
+    }()
 
     private var dateAtProgress: Date {
         let totalDays = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 1
@@ -59,11 +69,12 @@ struct DateScrubber: View {
                             .padding(.vertical, 40)
 
                         // Month tick marks
-                        ForEach(monthTicks(in: geo.size.height), id: \.offset) { tick in
+                        let usable = geo.size.height - 80
+                        ForEach(Array(monthProgresses.enumerated()), id: \.offset) { _, progress in
                             Circle()
                                 .fill(Color(.systemGray3))
                                 .frame(width: 5, height: 5)
-                                .position(x: 1.5, y: tick.offset)
+                                .position(x: 1.5, y: progress * usable + 40)
                         }
 
                         // Drag knob (shown during drag)
@@ -88,6 +99,7 @@ struct DateScrubber: View {
                             }
                             .onEnded { _ in
                                 onDateSelected(dateAtProgress)
+                                lastMonth = -1
                                 withAnimation(.easeOut(duration: 0.3)) {
                                     isDragging = false
                                 }
@@ -102,42 +114,51 @@ struct DateScrubber: View {
 
     private func updateLabel() {
         let date = dateAtProgress
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM yyyy"
-        currentLabel = formatter.string(from: date)
+        currentLabel = Self.labelFormatter.string(from: date)
+
+        // Haptic feedback when crossing month boundaries
+        let month = calendar.component(.month, from: date)
+        if lastMonth != -1 && month != lastMonth {
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        }
+        lastMonth = month
     }
 
-    private struct MonthTick: Identifiable {
-        let id = UUID()
-        let offset: CGFloat
+    /// Normalized month progress values (0...1), cached and rebuilt only when date range changes.
+    private var monthProgresses: [CGFloat] {
+        if cachedStartDate == startDate && cachedEndDate == endDate {
+            return cachedMonthProgresses
+        }
+        let result = computeMonthProgresses()
+        // Defer state update to avoid modifying state during view update
+        DispatchQueue.main.async {
+            cachedMonthProgresses = result
+            cachedStartDate = startDate
+            cachedEndDate = endDate
+        }
+        return result
     }
 
-    private func monthTicks(in height: CGFloat) -> [MonthTick] {
+    private func computeMonthProgresses() -> [CGFloat] {
         let totalDays = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 1
         guard totalDays > 0 else { return [] }
 
-        var ticks: [MonthTick] = []
-        let current = startDate
+        var progresses: [CGFloat] = []
 
-        // Find first of next month
-        var comps = calendar.dateComponents([.year, .month], from: current)
+        var comps = calendar.dateComponents([.year, .month], from: startDate)
         comps.month! += 1
         comps.day = 1
-        guard var monthStart = calendar.date(from: comps) else { return ticks }
-
-        let usableHeight = height - 80
+        guard var monthStart = calendar.date(from: comps) else { return progresses }
 
         while monthStart < endDate {
             let daysFromStart = calendar.dateComponents([.day], from: startDate, to: monthStart).day ?? 0
-            let progress = CGFloat(daysFromStart) / CGFloat(totalDays)
-            let yOffset = progress * usableHeight + 40
-            ticks.append(MonthTick(offset: yOffset))
-
+            progresses.append(CGFloat(daysFromStart) / CGFloat(totalDays))
             guard let next = calendar.date(byAdding: .month, value: 1, to: monthStart) else { break }
             monthStart = next
         }
 
-        return ticks
+        return progresses
     }
 }
 

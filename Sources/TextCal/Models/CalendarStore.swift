@@ -27,10 +27,21 @@ final class CalendarStore {
     /// Whether EventKit access has been granted
     private(set) var hasCalendarAccess = false
 
+    /// Sync status for UI feedback
+    enum SyncStatus: Equatable {
+        case idle
+        case saving
+        case syncing
+    }
+    private(set) var syncStatus: SyncStatus = .idle
+
     private(set) var eventKitManager: EventKitManager?
     private var fileStore: FileStore?
     private var coalescer: ChangeCoalescer?
     private(set) var calendarSettings: CalendarSettings?
+
+    /// Debounce EventKit sync to avoid re-syncing on every keystroke
+    private var syncTask: Task<Void, Never>?
 
     // Keep legacy properties for compatibility during transition
     private(set) var eventLineInfos: [Date: [EventLineInfo]] = [:]
@@ -131,7 +142,41 @@ final class CalendarStore {
         let key = DateFormatting.normalizeToDay(date)
         let ekEvents = await ekManager.events(for: key)
         let defaultCalId = await resolveDefaultCalendarId()
+        processEventsForDate(key, ekEvents: ekEvents, defaultCalId: defaultCalId)
+    }
 
+    /// Batch refresh events for a date range using a single EventKit query.
+    /// Much faster than calling refreshEvents(for:) per-date.
+    func refreshEventsInRange(from start: Date, to end: Date) async {
+        guard let ekManager = eventKitManager, hasCalendarAccess else { return }
+        let cal = Calendar.current
+        let normalizedStart = DateFormatting.normalizeToDay(start)
+        guard let rangeEnd = cal.date(byAdding: .day, value: 1, to: DateFormatting.normalizeToDay(end)) else { return }
+
+        let allEvents = await ekManager.events(from: normalizedStart, to: rangeEnd)
+        let defaultCalId = await resolveDefaultCalendarId()
+
+        // Group events by day
+        var eventsByDay: [Date: [EKEvent]] = [:]
+        for event in allEvents {
+            let dayKey = DateFormatting.normalizeToDay(event.startDate)
+            eventsByDay[dayKey, default: []].append(event)
+        }
+
+        // Process each day's events
+        var current = normalizedStart
+        let normalizedEnd = DateFormatting.normalizeToDay(end)
+        while current <= normalizedEnd {
+            let dayEvents = eventsByDay[current] ?? []
+            processEventsForDate(current, ekEvents: dayEvents, defaultCalId: defaultCalId)
+            guard let next = cal.date(byAdding: .day, value: 1, to: current) else { break }
+            current = next
+        }
+    }
+
+    /// Shared logic: process EventKit events for a single date, building color map + unmatched list.
+    private func processEventsForDate(_ key: Date, ekEvents: [EKEvent], defaultCalId: String?) {
+        let cal = Calendar.current
         var colorMap: [EventColorKey: Color] = [:]
         var allInfos: [EventLineInfo] = []
         var allLines: [String] = []
@@ -142,8 +187,6 @@ final class CalendarStore {
             allLines.append(line)
             allInfos.append(EventLineInfo(text: line, calendarColor: color))
 
-            // Build color key from EventKit event
-            let cal = Calendar.current
             let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
             let colorKey = EventColorKey(
                 title: event.title ?? "",
@@ -193,7 +236,6 @@ final class CalendarStore {
 
         var unmatched: [EventLineInfo] = []
         for event in ekEvents {
-            let cal = Calendar.current
             let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
             let ek = EventColorKey(
                 title: event.title ?? "",
@@ -229,6 +271,7 @@ final class CalendarStore {
     // MARK: - Writing
 
     /// Update from the text editor. Saves full interleaved text, parses events for EventKit sync.
+    /// Single-pass parsing: extracts journal lines and event groups simultaneously.
     func update(date: Date, text: String) {
         let key = DateFormatting.normalizeToDay(date)
         let lines = text.components(separatedBy: "\n")
@@ -238,34 +281,14 @@ final class CalendarStore {
         if trimmed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             dayTexts.removeValue(forKey: key)
             journals.removeValue(forKey: key)
-        } else {
-            dayTexts[key] = trimmed
-            // Also extract journal-only lines for legacy compatibility
-            var journalLines: [String] = []
-            for line in lines {
-                let parsed = LineParser.parse(line)
-                switch parsed {
-                case .event, .allDay:
-                    break
-                case .eventNote:
-                    break
-                default:
-                    journalLines.append(line)
-                }
-            }
-            let journalText = journalLines.joined(separator: "\n")
-                .trimmingCharacters(in: .newlines)
-            if journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                journals.removeValue(forKey: key)
-            } else {
-                journals[key] = journalText
-            }
+            scheduleDayTextSave(date: key, text: "")
+            return
         }
 
-        // Save the full text to file (interleaved)
-        scheduleDayTextSave(date: key, text: trimmed)
+        dayTexts[key] = trimmed
 
-        // Parse events for EventKit sync
+        // Single pass: extract journal lines + event groups together
+        var journalLines: [String] = []
         var parsedEvents: [ParsedEventGroup] = []
         var currentEvent: ParsedEventGroup?
 
@@ -310,6 +333,7 @@ final class CalendarStore {
                     parsedEvents.append(pending)
                     currentEvent = nil
                 }
+                journalLines.append(line)
             }
         }
 
@@ -317,12 +341,36 @@ final class CalendarStore {
             parsedEvents.append(pending)
         }
 
-        // Write events to EventKit
+        // Update legacy journal text
+        let journalText = journalLines.joined(separator: "\n")
+            .trimmingCharacters(in: .newlines)
+        if journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            journals.removeValue(forKey: key)
+        } else {
+            journals[key] = journalText
+        }
+
+        // Save the full text to file (interleaved)
+        syncStatus = .saving
+        scheduleDayTextSave(date: key, text: trimmed)
+
+        // Write events to EventKit (debounced to avoid syncing on every keystroke)
         if hasCalendarAccess && !parsedEvents.isEmpty {
             let events = parsedEvents
-            Task {
+            syncTask?.cancel()
+            syncTask = Task {
+                try? await Task.sleep(for: .milliseconds(800))
+                guard !Task.isCancelled else { return }
+                syncStatus = .syncing
                 await syncEventsToEventKit(date: key, events: events)
                 await refreshEvents(for: key)
+                syncStatus = .idle
+            }
+        } else {
+            // No EventKit sync needed — mark idle after a short delay (file save is async)
+            Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                if syncStatus == .saving { syncStatus = .idle }
             }
         }
     }
