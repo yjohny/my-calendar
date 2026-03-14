@@ -32,6 +32,9 @@ final class CalendarStore {
     private var coalescer: ChangeCoalescer?
     private(set) var calendarSettings: CalendarSettings?
 
+    /// Debounce EventKit sync to avoid re-syncing on every keystroke
+    private var syncTask: Task<Void, Never>?
+
     // Keep legacy properties for compatibility during transition
     private(set) var eventLineInfos: [Date: [EventLineInfo]] = [:]
     private(set) var eventLines: [Date: [String]] = [:]
@@ -229,6 +232,7 @@ final class CalendarStore {
     // MARK: - Writing
 
     /// Update from the text editor. Saves full interleaved text, parses events for EventKit sync.
+    /// Single-pass parsing: extracts journal lines and event groups simultaneously.
     func update(date: Date, text: String) {
         let key = DateFormatting.normalizeToDay(date)
         let lines = text.components(separatedBy: "\n")
@@ -238,34 +242,14 @@ final class CalendarStore {
         if trimmed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             dayTexts.removeValue(forKey: key)
             journals.removeValue(forKey: key)
-        } else {
-            dayTexts[key] = trimmed
-            // Also extract journal-only lines for legacy compatibility
-            var journalLines: [String] = []
-            for line in lines {
-                let parsed = LineParser.parse(line)
-                switch parsed {
-                case .event, .allDay:
-                    break
-                case .eventNote:
-                    break
-                default:
-                    journalLines.append(line)
-                }
-            }
-            let journalText = journalLines.joined(separator: "\n")
-                .trimmingCharacters(in: .newlines)
-            if journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                journals.removeValue(forKey: key)
-            } else {
-                journals[key] = journalText
-            }
+            scheduleDayTextSave(date: key, text: "")
+            return
         }
 
-        // Save the full text to file (interleaved)
-        scheduleDayTextSave(date: key, text: trimmed)
+        dayTexts[key] = trimmed
 
-        // Parse events for EventKit sync
+        // Single pass: extract journal lines + event groups together
+        var journalLines: [String] = []
         var parsedEvents: [ParsedEventGroup] = []
         var currentEvent: ParsedEventGroup?
 
@@ -310,6 +294,7 @@ final class CalendarStore {
                     parsedEvents.append(pending)
                     currentEvent = nil
                 }
+                journalLines.append(line)
             }
         }
 
@@ -317,10 +302,25 @@ final class CalendarStore {
             parsedEvents.append(pending)
         }
 
-        // Write events to EventKit
+        // Update legacy journal text
+        let journalText = journalLines.joined(separator: "\n")
+            .trimmingCharacters(in: .newlines)
+        if journalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            journals.removeValue(forKey: key)
+        } else {
+            journals[key] = journalText
+        }
+
+        // Save the full text to file (interleaved)
+        scheduleDayTextSave(date: key, text: trimmed)
+
+        // Write events to EventKit (debounced to avoid syncing on every keystroke)
         if hasCalendarAccess && !parsedEvents.isEmpty {
             let events = parsedEvents
-            Task {
+            syncTask?.cancel()
+            syncTask = Task {
+                try? await Task.sleep(for: .milliseconds(800))
+                guard !Task.isCancelled else { return }
                 await syncEventsToEventKit(date: key, events: events)
                 await refreshEvents(for: key)
             }

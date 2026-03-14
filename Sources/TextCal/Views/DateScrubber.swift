@@ -10,10 +10,17 @@ struct DateScrubber: View {
     @State private var isDragging = false
     @State private var dragProgress: CGFloat = 0.5
     @State private var currentLabel = ""
+    @State private var lastMonth = -1  // track month for haptic feedback
 
     private let calendar = Calendar.current
     private let trackWidth: CGFloat = 32
     private let knobHeight: CGFloat = 40
+
+    private static let labelFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM yyyy"
+        return f
+    }()
 
     private var dateAtProgress: Date {
         let totalDays = calendar.dateComponents([.day], from: startDate, to: endDate).day ?? 1
@@ -88,6 +95,7 @@ struct DateScrubber: View {
                             }
                             .onEnded { _ in
                                 onDateSelected(dateAtProgress)
+                                lastMonth = -1
                                 withAnimation(.easeOut(duration: 0.3)) {
                                     isDragging = false
                                 }
@@ -102,9 +110,15 @@ struct DateScrubber: View {
 
     private func updateLabel() {
         let date = dateAtProgress
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM yyyy"
-        currentLabel = formatter.string(from: date)
+        currentLabel = Self.labelFormatter.string(from: date)
+
+        // Haptic feedback when crossing month boundaries
+        let month = calendar.component(.month, from: date)
+        if lastMonth != -1 && month != lastMonth {
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        }
+        lastMonth = month
     }
 
     private struct MonthTick: Identifiable {

@@ -52,8 +52,8 @@ struct CalendarDocumentView: View {
 
                 // Date scrubber on right edge
                 DateScrubber(
-                    startDate: viewModel.startDate,
-                    endDate: viewModel.endDate
+                    startDate: viewModel.dateRangeStart,
+                    endDate: viewModel.dateRangeEnd
                 ) { date in
                     viewModel.jumpTo(date: date)
                 }
