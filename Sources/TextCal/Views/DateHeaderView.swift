@@ -40,5 +40,9 @@ struct DateHeaderView: View {
         .onTapGesture {
             onTap?()
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(DateFormatting.headerString(for: date) + (isToday ? ", Today" : ""))
+        .accessibilityAddTraits(onTap != nil ? .isButton : [])
+        .accessibilityHint(onTap != nil ? "Opens date picker" : "")
     }
 }

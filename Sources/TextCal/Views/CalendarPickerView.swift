@@ -6,6 +6,7 @@ struct CalendarPickerView: View {
     let calendars: [EKCalendar]
     @Binding var selectedIdentifier: String?
     @Environment(\.dismiss) private var dismiss
+    @ScaledMetric(relativeTo: .body) private var dotSize: CGFloat = 12
 
     var body: some View {
         NavigationView {
@@ -18,7 +19,7 @@ struct CalendarPickerView: View {
                     HStack(spacing: 12) {
                         Circle()
                             .fill(Color(cgColor: calendar.cgColor))
-                            .frame(width: 12, height: 12)
+                            .frame(width: dotSize, height: dotSize)
                         Text(calendar.title)
                             .font(.system(.body, design: .rounded))
                             .foregroundStyle(.primary)
@@ -30,13 +31,14 @@ struct CalendarPickerView: View {
                         }
                     }
                 }
+                .accessibilityLabel("\(calendar.title)\(calendar.calendarIdentifier == selectedIdentifier ? ", selected" : "")")
                 }
             }
-            .navigationTitle("Default Calendar")
+            .navigationTitle(Strings.defaultCalendar)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button { dismiss() } label: { Text(Strings.done) }
                 }
             }
         }

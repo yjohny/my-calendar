@@ -26,8 +26,10 @@ struct DayTextEditor: View {
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
                             Spacer()
-                            Button("Done") {
+                            Button {
                                 editorFocused = false
+                            } label: {
+                                Text(Strings.done)
                             }
                             .fontWeight(.medium)
                         }
@@ -47,7 +49,7 @@ struct DayTextEditor: View {
                         editorFocused = true
                     }
             } else if !hasContent {
-                Text("Type events like 9:00 AM - Meeting, or just write...")
+                Text(Strings.editorPlaceholder)
                     .font(.system(.body, design: .rounded))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
@@ -57,6 +59,8 @@ struct DayTextEditor: View {
                     .onTapGesture {
                         isEditing = true
                     }
+                    .accessibilityLabel("No events for \(DateFormatting.headerString(for: date))")
+                    .accessibilityHint("Double tap to add events or notes")
             } else {
                 StyledTextView(
                     text: text,
@@ -70,6 +74,8 @@ struct DayTextEditor: View {
                 .onTapGesture {
                     isEditing = true
                 }
+                .accessibilityLabel("Events and notes for \(DateFormatting.headerString(for: date))")
+                .accessibilityHint("Double tap to edit")
             }
         }
         .onAppear {

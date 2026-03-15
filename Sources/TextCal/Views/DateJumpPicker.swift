@@ -34,17 +34,19 @@ struct DateJumpPicker: View {
                 Spacer()
             }
             .padding(.top)
-            .navigationTitle("Jump to Date")
+            .navigationTitle(Strings.jumpToDate)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button { dismiss() } label: { Text(Strings.cancel) }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Today") {
+                    Button {
                         selectedDate = DateFormatting.today
                         onJump(selectedDate)
                         dismiss()
+                    } label: {
+                        Text(Strings.today)
                     }
                 }
             }

@@ -140,25 +140,25 @@ actor EventKitManager {
     }
 
     /// Remove an event
-    func removeEvent(_ event: EKEvent, span: EKSpan = .thisEvent) {
-        try? store.remove(event, span: span, commit: true)
+    func removeEvent(_ event: EKEvent, span: EKSpan = .thisEvent) throws {
+        try store.remove(event, span: span, commit: true)
     }
 
     /// Remove non-recurring events in TextCal calendar for a given date.
     /// Recurring event occurrences are left untouched to avoid duplication bugs.
-    func removeTextCalEvents(for date: Date) {
+    func removeTextCalEvents(for date: Date) throws {
         guard let cal = getOrCreateCalendar() else { return }
-        removeManagedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
+        try removeManagedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
     }
 
     /// Remove non-recurring events for a given date in the specified calendar.
-    func removeManagedEvents(for date: Date, calendarIdentifier: String) {
+    func removeManagedEvents(for date: Date, calendarIdentifier: String) throws {
         let dayEvents = events(for: date).filter { $0.calendar.calendarIdentifier == calendarIdentifier }
         for event in dayEvents {
             if event.hasRecurrenceRules {
                 continue  // skip recurring occurrences
             }
-            try? store.remove(event, span: .thisEvent, commit: true)
+            try store.remove(event, span: .thisEvent, commit: true)
         }
     }
 

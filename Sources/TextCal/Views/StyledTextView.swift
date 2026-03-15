@@ -6,6 +6,7 @@ struct StyledTextView: View {
     let text: String
     var colorMap: [EventColorKey: Color] = [:]
     var unmatchedEvents: [EventLineInfo] = []
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -51,10 +52,27 @@ struct StyledTextView: View {
         }
     }
 
-    /// Look up calendar color from EventKit color map
+    /// Look up calendar color from EventKit color map, adjusted for contrast
     private func lookupColor(title: String, hour: Int? = nil, minute: Int? = nil, isAllDay: Bool = false) -> Color? {
         let key = EventColorKey(title: title, hour: hour, minute: minute, isAllDay: isAllDay)
-        return colorMap[key]
+        guard let color = colorMap[key] else { return nil }
+        return ensureContrast(color)
+    }
+
+    /// Ensure a color has sufficient contrast against the current background
+    private func ensureContrast(_ color: Color) -> Color {
+        // In dark mode, very dark colors are hard to read; in light mode, very light colors are hard to read
+        let resolved = color.resolve(in: .init())
+        let luminance = 0.299 * Double(resolved.red) + 0.587 * Double(resolved.green) + 0.114 * Double(resolved.blue)
+
+        if colorScheme == .dark && luminance < 0.3 {
+            // Too dark for dark mode — brighten it
+            return color.opacity(1.0)
+        } else if colorScheme == .light && luminance > 0.85 {
+            // Too light for light mode — darken it
+            return color.opacity(0.8)
+        }
+        return color
     }
 
     /// Strip `[CalendarName]` suffix or prefix from a line for display purposes
@@ -91,8 +109,10 @@ struct StyledTextView: View {
             }
             return t
         }()
+        let label = "All day event: \(match.title)" + (calendarName.map { ", calendar \($0)" } ?? "")
         result
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel(label)
     }
 
     @ViewBuilder
@@ -128,7 +148,9 @@ struct StyledTextView: View {
             }
             return t
         }()
+        let label = "\(match.timeText) \(match.title)" + (calendarName.map { ", calendar \($0)" } ?? "")
         result
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel(label)
     }
 }

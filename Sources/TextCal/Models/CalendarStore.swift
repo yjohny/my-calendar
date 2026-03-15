@@ -32,8 +32,9 @@ final class CalendarStore {
         case idle
         case saving
         case syncing
+        case error(String)
     }
-    private(set) var syncStatus: SyncStatus = .idle
+    var syncStatus: SyncStatus = .idle
 
     private(set) var eventKitManager: EventKitManager?
     private var fileStore: FileStore?
@@ -43,11 +44,15 @@ final class CalendarStore {
     /// Debounce EventKit sync to avoid re-syncing on every keystroke
     private var syncTask: Task<Void, Never>?
 
-    // Keep legacy properties for compatibility during transition
-    private(set) var eventLineInfos: [Date: [EventLineInfo]] = [:]
-    private(set) var eventLines: [Date: [String]] = [:]
-    /// Journal text per date (only freeform text, not events) — kept for migration
-    private(set) var journals: [Date: String] = [:]
+    /// LRU tracking for dayTexts cache eviction
+    private var accessOrder: [Date] = []
+    private let maxCachedDays = 180
+
+    /// Cached parsed event keys to avoid re-parsing unchanged text
+    private var parsedKeyCache: [Date: (hash: Int, keys: Set<EventColorKey>)] = [:]
+
+    /// Journal text per date (only freeform text, not events) — used during parsing
+    private var journals: [Date: String] = [:]
 
     init() {}
 
@@ -57,6 +62,15 @@ final class CalendarStore {
         self.fileStore = fileStore
         self.coalescer = coalescer
         self.calendarSettings = calendarSettings
+
+        // Wire up error reporting from the coalescer
+        Task {
+            await coalescer.setErrorHandler { [weak self] _ in
+                Task { @MainActor in
+                    self?.syncStatus = .error(Strings.saveFailed)
+                }
+            }
+        }
     }
 
     /// Request calendar access and load initial data
@@ -83,11 +97,43 @@ final class CalendarStore {
         }
     }
 
+    // MARK: - LRU Cache
+
+    /// Mark a date as recently accessed and evict old entries if needed
+    private func touchDate(_ date: Date) {
+        accessOrder.removeAll { $0 == date }
+        accessOrder.append(date)
+        evictIfNeeded()
+    }
+
+    /// Evict least-recently-accessed entries when cache exceeds threshold
+    private func evictIfNeeded() {
+        while accessOrder.count > maxCachedDays {
+            let evicted = accessOrder.removeFirst()
+            dayTexts.removeValue(forKey: evicted)
+            eventColorMap.removeValue(forKey: evicted)
+            unmatchedEventLines.removeValue(forKey: evicted)
+            journals.removeValue(forKey: evicted)
+            parsedKeyCache.removeValue(forKey: evicted)
+        }
+    }
+
     // MARK: - Reading
 
     /// Get the full display text for a date (interleaved events + journal in user order)
     func displayText(for date: Date) -> String {
         let key = DateFormatting.normalizeToDay(date)
+        touchDate(key)
+
+        // Lazy-load from disk on cache miss
+        if dayTexts[key] == nil, let fileStore {
+            Task {
+                if let text = try? await fileStore.loadJournal(for: key) {
+                    dayTexts[key] = text
+                }
+            }
+        }
+
         let userText = dayTexts[key] ?? ""
         let unmatched = unmatchedEventLines[key] ?? []
 
@@ -103,24 +149,6 @@ final class CalendarStore {
         let unmatchedText = unmatched.map(\.text).joined(separator: "\n")
         parts.append(unmatchedText)
         return parts.joined(separator: "\n")
-    }
-
-    /// Get just the journal text for a date (legacy compatibility)
-    func journalText(for date: Date) -> String {
-        let key = DateFormatting.normalizeToDay(date)
-        return journals[key] ?? ""
-    }
-
-    /// Get the event lines for a date (from EventKit) — legacy compatibility
-    func eventLinesForDate(_ date: Date) -> [String] {
-        let key = DateFormatting.normalizeToDay(date)
-        return eventLines[key] ?? []
-    }
-
-    /// Get event line infos (with calendar colors) for a date — legacy compatibility
-    func eventLineInfosForDate(_ date: Date) -> [EventLineInfo] {
-        let key = DateFormatting.normalizeToDay(date)
-        return eventLineInfos[key] ?? []
     }
 
     /// Get the color map for a date (used by StyledTextView to color event lines)
@@ -178,15 +206,9 @@ final class CalendarStore {
     private func processEventsForDate(_ key: Date, ekEvents: [EKEvent], defaultCalId: String?) {
         let cal = Calendar.current
         var colorMap: [EventColorKey: Color] = [:]
-        var allInfos: [EventLineInfo] = []
-        var allLines: [String] = []
 
         for event in ekEvents {
-            let line = EventKitSync.textLine(from: event, defaultCalendarId: defaultCalId)
             let color = EventKitSync.calendarColor(from: event)
-            allLines.append(line)
-            allInfos.append(EventLineInfo(text: line, calendarColor: color))
-
             let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
             let colorKey = EventColorKey(
                 title: event.title ?? "",
@@ -195,43 +217,43 @@ final class CalendarStore {
                 isAllDay: event.isAllDay
             )
             colorMap[colorKey] = color
-
-            let noteLines = EventKitSync.noteLines(from: event)
-            for note in noteLines {
-                allLines.append(note)
-                allInfos.append(EventLineInfo(text: note, calendarColor: color))
-            }
         }
 
         eventColorMap[key] = colorMap
-        eventLines[key] = allLines.isEmpty ? nil : allLines
-        eventLineInfos[key] = allInfos.isEmpty ? nil : allInfos
 
-        // Find EventKit events not represented in user's text
+        // Find EventKit events not represented in user's text (with caching)
         let userText = dayTexts[key] ?? ""
-        let userLines = userText.components(separatedBy: "\n")
-        var userEventKeys = Set<EventColorKey>()
+        let textHash = userText.hashValue
+        let userEventKeys: Set<EventColorKey>
 
-        for line in userLines {
-            let parsed = LineParser.parse(line)
-            switch parsed {
-            case .event(let time, _, let title, _, _):
-                userEventKeys.insert(EventColorKey(
-                    title: title,
-                    hour: time.hour,
-                    minute: time.minute,
-                    isAllDay: false
-                ))
-            case .allDay(let title, _, _):
-                userEventKeys.insert(EventColorKey(
-                    title: title,
-                    hour: nil,
-                    minute: nil,
-                    isAllDay: true
-                ))
-            default:
-                break
+        if let cached = parsedKeyCache[key], cached.hash == textHash {
+            userEventKeys = cached.keys
+        } else {
+            let userLines = userText.components(separatedBy: "\n")
+            var keys = Set<EventColorKey>()
+            for line in userLines {
+                let parsed = LineParser.parse(line)
+                switch parsed {
+                case .event(let time, _, let title, _, _):
+                    keys.insert(EventColorKey(
+                        title: title,
+                        hour: time.hour,
+                        minute: time.minute,
+                        isAllDay: false
+                    ))
+                case .allDay(let title, _, _):
+                    keys.insert(EventColorKey(
+                        title: title,
+                        hour: nil,
+                        minute: nil,
+                        isAllDay: true
+                    ))
+                default:
+                    break
+                }
             }
+            parsedKeyCache[key] = (hash: textHash, keys: keys)
+            userEventKeys = keys
         }
 
         var unmatched: [EventLineInfo] = []
@@ -362,44 +384,38 @@ final class CalendarStore {
                 try? await Task.sleep(for: .milliseconds(800))
                 guard !Task.isCancelled else { return }
                 syncStatus = .syncing
-                await syncEventsToEventKit(date: key, events: events)
-                await refreshEvents(for: key)
+                do {
+                    try await syncEventsToEventKit(date: key, events: events)
+                    await refreshEvents(for: key)
+                    syncStatus = .idle
+                } catch {
+                    syncStatus = .error(Strings.syncFailed)
+                }
+            }
+        } else {
+            // No EventKit sync needed — only go idle if no sync task is active
+            if syncTask == nil || syncTask?.isCancelled == true {
                 syncStatus = .idle
             }
-        } else {
-            // No EventKit sync needed — mark idle after a short delay (file save is async)
-            Task {
-                try? await Task.sleep(for: .milliseconds(600))
-                if syncStatus == .saving { syncStatus = .idle }
-            }
         }
-    }
-
-    /// Update just the journal text (no event parsing)
-    func updateJournal(date: Date, text: String) {
-        let key = DateFormatting.normalizeToDay(date)
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            journals.removeValue(forKey: key)
-            dayTexts.removeValue(forKey: key)
-        } else {
-            journals[key] = text
-            dayTexts[key] = text
-        }
-        scheduleDayTextSave(date: key, text: text)
     }
 
     /// Force an immediate save (e.g., on app background)
     func forceSave() async {
         guard let fileStore else { return }
         for (date, text) in dayTexts {
-            try? await fileStore.saveJournal(text, for: date)
+            do {
+                try await fileStore.saveJournal(text, for: date)
+            } catch {
+                syncStatus = .error(Strings.saveFailed)
+                return
+            }
         }
     }
 
     // MARK: - EventKit Sync
 
-    private func syncEventsToEventKit(date: Date, events: [ParsedEventGroup]) async {
+    private func syncEventsToEventKit(date: Date, events: [ParsedEventGroup]) async throws {
         guard let ekManager = eventKitManager else { return }
 
         // Resolve the default calendar
@@ -429,7 +445,7 @@ final class CalendarStore {
             let existingRecurring = existingEvents.filter { $0.hasRecurrenceRules }
 
             // Remove only non-recurring events in the default calendar
-            await ekManager.removeManagedEvents(for: date, calendarIdentifier: calId)
+            try await ekManager.removeManagedEvents(for: date, calendarIdentifier: calId)
 
             for event in defaultCalEvents {
                 if matchesExistingRecurring(event, existing: existingRecurring, date: date) {
@@ -513,12 +529,17 @@ final class CalendarStore {
                 return true
             }
 
-            // Compare start times
+            // Compare start times and end times
             if let startTime = parsed.startTime {
                 let ekComps = cal.dateComponents([.hour, .minute], from: ekEvent.startDate)
-                if ekComps.hour == startTime.hour && ekComps.minute == startTime.minute {
-                    return true
+                guard ekComps.hour == startTime.hour && ekComps.minute == startTime.minute else { continue }
+
+                // Also compare end time to distinguish events at the same start time
+                if let endTime = parsed.endTime {
+                    let ekEndComps = cal.dateComponents([.hour, .minute], from: ekEvent.endDate)
+                    guard ekEndComps.hour == endTime.hour && ekEndComps.minute == endTime.minute else { continue }
                 }
+                return true
             }
         }
         return false

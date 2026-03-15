@@ -12,52 +12,86 @@ struct CalendarDocumentView: View {
     @State private var defaultCalendarId: String?
     @State private var pickerDate = DateFormatting.today
     @State private var currentVisibleDate = DateFormatting.today
+    @AppStorage("dismissedCalendarPermissionBanner") private var dismissedPermissionBanner = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(viewModel.dates, id: \.self) { date in
-                                DaySectionView(date: date) {
-                                    pickerDate = date
-                                    showingDatePicker = true
-                                }
-                                .id(date)
-                                .onAppear {
-                                    viewModel.expandIfNeeded(visibleDate: date)
-                                    currentVisibleDate = date
-                                }
+            VStack(spacing: 0) {
+                if !store.hasCalendarAccess && !dismissedPermissionBanner {
+                    HStack {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                            .foregroundStyle(.orange)
+                        Text(Strings.calendarAccessDenied)
+                            .font(.system(.caption, design: .rounded))
+                        Spacer()
+                        Button {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
                             }
+                        } label: {
+                            Text(Strings.settings)
+                                .font(.system(.caption, design: .rounded))
+                                .fontWeight(.semibold)
                         }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .defaultScrollAnchor(.center)
-                    .onAppear {
-                        DispatchQueue.main.async {
-                            proxy.scrollTo(DateFormatting.today, anchor: .top)
+                        Button {
+                            dismissedPermissionBanner = true
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
+                        .accessibilityLabel("Dismiss")
                     }
-                    .onChange(of: viewModel.scrollTarget) { _, target in
-                        if let target {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(target, anchor: .top)
-                            }
-                            viewModel.scrollTarget = nil
-                        }
-                    }
-                    .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-                        Task { await store.forceSave() }
-                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
+                    .accessibilityElement(children: .combine)
                 }
+                ZStack {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(viewModel.dates, id: \.self) { date in
+                                    DaySectionView(date: date) {
+                                        pickerDate = date
+                                        showingDatePicker = true
+                                    }
+                                    .id(date)
+                                    .onAppear {
+                                        viewModel.expandIfNeeded(visibleDate: date)
+                                        currentVisibleDate = date
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .defaultScrollAnchor(.center)
+                        .onAppear {
+                            DispatchQueue.main.async {
+                                proxy.scrollTo(DateFormatting.today, anchor: .top)
+                            }
+                        }
+                        .onChange(of: viewModel.scrollTarget) { _, target in
+                            if let target {
+                                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo(target, anchor: .top)
+                                }
+                                viewModel.scrollTarget = nil
+                            }
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                            Task { await store.forceSave() }
+                        }
+                    }
 
-                // Date scrubber on right edge
-                DateScrubber(
-                    startDate: viewModel.dateRangeStart,
-                    endDate: viewModel.dateRangeEnd
-                ) { date in
-                    viewModel.jumpTo(date: date)
+                    // Date scrubber on right edge
+                    DateScrubber(
+                        startDate: viewModel.dateRangeStart,
+                        endDate: viewModel.dateRangeEnd
+                    ) { date in
+                        viewModel.jumpTo(date: date)
+                    }
                 }
             }
             .toolbar {
@@ -106,15 +140,37 @@ struct CalendarDocumentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    if store.syncStatus != .idle {
+                    if case .error(let message) = store.syncStatus {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                                .font(.caption)
+                            Text(message)
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundStyle(.red)
+                        }
+                        .transition(.opacity)
+                        .onTapGesture {
+                            store.syncStatus = .idle
+                        }
+                        .task {
+                            try? await Task.sleep(for: .seconds(5))
+                            if case .error = store.syncStatus {
+                                store.syncStatus = .idle
+                            }
+                        }
+                        .accessibilityLabel("Error: \(message)")
+                        .accessibilityHint("Tap to dismiss")
+                    } else if store.syncStatus != .idle {
                         HStack(spacing: 6) {
                             ProgressView()
                                 .controlSize(.mini)
-                            Text(store.syncStatus == .saving ? "Saving..." : "Syncing...")
+                            Text(store.syncStatus == .saving ? Strings.saving : Strings.syncing)
                                 .font(.system(.caption, design: .rounded))
                                 .foregroundStyle(.secondary)
                         }
                         .transition(.opacity)
+                        .accessibilityLabel(store.syncStatus == .saving ? "Saving changes" : "Syncing with calendar")
                     }
                 }
             }

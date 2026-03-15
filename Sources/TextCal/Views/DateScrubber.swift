@@ -7,13 +7,12 @@ struct DateScrubber: View {
     let endDate: Date
     let onDateSelected: (Date) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isDragging = false
     @State private var dragProgress: CGFloat = 0.5
     @State private var currentLabel = ""
     @State private var lastMonth = -1  // track month for haptic feedback
     @State private var cachedMonthProgresses: [CGFloat] = []
-    @State private var cachedStartDate: Date?
-    @State private var cachedEndDate: Date?
 
     private let calendar = Calendar.current
     private let trackWidth: CGFloat = 32
@@ -46,7 +45,7 @@ struct DateScrubber: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
-                            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
 
                         // Arrow pointing to track
                         Triangle()
@@ -55,7 +54,7 @@ struct DateScrubber: View {
                     }
                     .offset(x: -trackWidth - 4)
                     .position(x: UIScreen.main.bounds.width / 2, y: dragProgress * UIScreen.main.bounds.height * 0.8 + UIScreen.main.bounds.height * 0.1)
-                    .animation(.interactiveSpring, value: dragProgress)
+                    .animation(reduceMotion ? nil : .interactiveSpring, value: dragProgress)
                 }
 
                 // Track
@@ -83,7 +82,7 @@ struct DateScrubber: View {
                                 .fill(Color.accentColor)
                                 .frame(width: 6, height: knobHeight)
                                 .position(x: 1.5, y: dragProgress * (geo.size.height - 80) + 40)
-                                .animation(.interactiveSpring, value: dragProgress)
+                                .animation(reduceMotion ? nil : .interactiveSpring, value: dragProgress)
                         }
                     }
                     .frame(width: trackWidth)
@@ -100,7 +99,7 @@ struct DateScrubber: View {
                             .onEnded { _ in
                                 onDateSelected(dateAtProgress)
                                 lastMonth = -1
-                                withAnimation(.easeOut(duration: 0.3)) {
+                                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) {
                                     isDragging = false
                                 }
                             }
@@ -110,6 +109,19 @@ struct DateScrubber: View {
             }
         }
         .allowsHitTesting(true)
+        .onAppear {
+            cachedMonthProgresses = computeMonthProgresses()
+        }
+        .onChange(of: startDate) { _, _ in
+            cachedMonthProgresses = computeMonthProgresses()
+        }
+        .onChange(of: endDate) { _, _ in
+            cachedMonthProgresses = computeMonthProgresses()
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Date scrubber")
+        .accessibilityValue(currentLabel.isEmpty ? "Drag to navigate dates" : currentLabel)
+        .accessibilityHint("Drag up or down to navigate dates")
     }
 
     private func updateLabel() {
@@ -127,17 +139,7 @@ struct DateScrubber: View {
 
     /// Normalized month progress values (0...1), cached and rebuilt only when date range changes.
     private var monthProgresses: [CGFloat] {
-        if cachedStartDate == startDate && cachedEndDate == endDate {
-            return cachedMonthProgresses
-        }
-        let result = computeMonthProgresses()
-        // Defer state update to avoid modifying state during view update
-        DispatchQueue.main.async {
-            cachedMonthProgresses = result
-            cachedStartDate = startDate
-            cachedEndDate = endDate
-        }
-        return result
+        cachedMonthProgresses
     }
 
     private func computeMonthProgresses() -> [CGFloat] {
