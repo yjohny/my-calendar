@@ -14,7 +14,7 @@ struct SearchView: View {
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
-                    TextField("Search events and notes...", text: $query)
+                    TextField(Strings.searchPlaceholder, text: $query)
                         .font(.system(.body, design: .rounded))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -25,6 +25,7 @@ struct SearchView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
                         }
+                        .accessibilityLabel("Clear search")
                     }
                 }
                 .padding(10)
@@ -35,9 +36,9 @@ struct SearchView: View {
 
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
                     ContentUnavailableView(
-                        "Search Your Calendar",
+                        Strings.searchTitle,
                         systemImage: "magnifyingglass",
-                        description: Text("Find events and notes across all days")
+                        description: Text(Strings.searchDescription)
                     )
                 } else if results.isEmpty {
                     ContentUnavailableView.search(text: query)
@@ -73,11 +74,11 @@ struct SearchView: View {
                     .listStyle(.insetGrouped)
                 }
             }
-            .navigationTitle("Search")
+            .navigationTitle(Strings.searchNavTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button { dismiss() } label: { Text(Strings.done) }
                         .font(.system(.body, design: .rounded))
                 }
             }
