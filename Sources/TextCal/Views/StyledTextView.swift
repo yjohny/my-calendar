@@ -1,5 +1,14 @@
 import SwiftUI
 
+/// A pre-parsed line for efficient rendering
+private enum ParsedLine {
+    case blank
+    case allDay(AllDayMatch, calendarName: String?)
+    case event(EventLineMatch, calendarName: String?)
+    case note(String)
+    case journal(String)
+}
+
 /// Displays day text with styling: event lines get color accents, journal text is plain.
 /// Lines render in document order (interleaved events + journal).
 struct StyledTextView: View {
@@ -8,16 +17,64 @@ struct StyledTextView: View {
     var unmatchedEvents: [EventLineInfo] = []
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Pre-parse lines once per data change, not on every render
+    private var parsedLines: [(Int, ParsedLine)] {
+        text.components(separatedBy: "\n").enumerated().map { index, line in
+            let (displayLine, calName) = stripCalendarPrefix(line)
+            let trimmed = displayLine.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                return (index, .blank)
+            } else if let match = LineParser.parseAllDayLine(displayLine) {
+                return (index, .allDay(match, calendarName: calName))
+            } else if let match = LineParser.parseEventLine(displayLine) {
+                return (index, .event(match, calendarName: calName))
+            } else if displayLine.hasPrefix("  ") {
+                return (index, .note(displayLine))
+            } else {
+                return (index, .journal(displayLine))
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             // Render user's text in document order
-            ForEach(Array(text.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
-                styledLine(line)
+            ForEach(parsedLines, id: \.0) { _, parsed in
+                parsedLineView(parsed)
             }
             // Append any EventKit events not in user's text
             ForEach(Array(unmatchedEvents.enumerated()), id: \.offset) { _, info in
                 styledLine(info.text, overrideColor: info.calendarColor)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func parsedLineView(_ parsed: ParsedLine) -> some View {
+        switch parsed {
+        case .blank:
+            Text(" ")
+                .font(.system(.body, design: .rounded))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .allDay(let match, let calName):
+            let color = lookupColor(title: match.title, isAllDay: true) ?? Color.orange
+            allDayView(match: match, calendarColor: color, calendarName: calName)
+        case .event(let match, let calName):
+            let color = lookupColor(
+                title: match.title,
+                hour: match.timeComponents.hour,
+                minute: match.timeComponents.minute
+            ) ?? Color.accentColor
+            eventView(match: match, calendarColor: color, calendarName: calName)
+        case .note(let text):
+            Text(text)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .journal(let text):
+            Text(text)
+                .font(.system(.body, design: .rounded))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -63,14 +120,23 @@ struct StyledTextView: View {
     private func ensureContrast(_ color: Color) -> Color {
         // In dark mode, very dark colors are hard to read; in light mode, very light colors are hard to read
         let resolved = color.resolve(in: .init())
-        let luminance = 0.299 * Double(resolved.red) + 0.587 * Double(resolved.green) + 0.114 * Double(resolved.blue)
+        let r = Double(resolved.red)
+        let g = Double(resolved.green)
+        let b = Double(resolved.blue)
+        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
 
         if colorScheme == .dark && luminance < 0.3 {
-            // Too dark for dark mode — brighten it
-            return color.opacity(1.0)
+            // Too dark for dark mode — lighten by blending toward white
+            let boost = 0.4
+            return Color(
+                red: min(r + boost, 1.0),
+                green: min(g + boost, 1.0),
+                blue: min(b + boost, 1.0)
+            )
         } else if colorScheme == .light && luminance > 0.85 {
-            // Too light for light mode — darken it
-            return color.opacity(0.8)
+            // Too light for light mode — darken by scaling down
+            let factor = 0.6
+            return Color(red: r * factor, green: g * factor, blue: b * factor)
         }
         return color
     }

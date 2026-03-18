@@ -84,15 +84,22 @@ struct DayTextEditor: View {
     }
 
     private func refreshState() {
-        // Load the full interleaved text from store
-        text = store.dayTexts[DateFormatting.normalizeToDay(date)] ?? ""
+        // Load the user's text (not displayText, since unmatched events are shown separately)
+        let key = DateFormatting.normalizeToDay(date)
+        text = store.dayTexts[key] ?? ""
         colorMap = store.colorMap(for: date)
         unmatchedEvents = store.unmatchedEvents(for: date)
         refreshTask?.cancel()
         let refreshDate = date
         refreshTask = Task {
+            await store.ensureLoaded(for: refreshDate)
             await store.refreshEvents(for: refreshDate)
             guard !Task.isCancelled else { return }
+            // Update text if it was loaded from disk
+            let loadedText = store.dayTexts[DateFormatting.normalizeToDay(refreshDate)] ?? ""
+            if text.isEmpty && !loadedText.isEmpty {
+                text = loadedText
+            }
             colorMap = store.colorMap(for: refreshDate)
             unmatchedEvents = store.unmatchedEvents(for: refreshDate)
         }

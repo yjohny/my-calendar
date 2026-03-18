@@ -5,6 +5,13 @@ import SwiftUI
 /// Converts between our text-based event format and EventKit objects
 enum EventKitSync {
 
+    /// Cached formatter for time strings (e.g. "9:00 AM")
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+
     // MARK: - EKEvent → Text Line
 
     /// Render an EKEvent as a text line suitable for display
@@ -39,10 +46,7 @@ enum EventKitSync {
     }
 
     private static func timedLine(from event: EKEvent) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-
-        let startStr = formatter.string(from: event.startDate)
+        let startStr = timeFormatter.string(from: event.startDate)
 
         // Check if end time is meaningful (not just start + default 1hr)
         let duration = event.endDate.timeIntervalSince(event.startDate)
@@ -50,7 +54,7 @@ enum EventKitSync {
 
         var line: String
         if hasEndTime {
-            let endStr = formatter.string(from: event.endDate)
+            let endStr = timeFormatter.string(from: event.endDate)
             line = "\(startStr)-\(endStr) - \(event.title ?? "Event")"
         } else {
             line = "\(startStr) - \(event.title ?? "Event")"

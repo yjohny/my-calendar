@@ -152,13 +152,19 @@ actor EventKitManager {
     }
 
     /// Remove non-recurring events for a given date in the specified calendar.
+    /// Batches removals into a single commit for better performance.
     func removeManagedEvents(for date: Date, calendarIdentifier: String) throws {
         let dayEvents = events(for: date).filter { $0.calendar.calendarIdentifier == calendarIdentifier }
+        var didRemove = false
         for event in dayEvents {
             if event.hasRecurrenceRules {
                 continue  // skip recurring occurrences
             }
-            try store.remove(event, span: .thisEvent, commit: true)
+            try store.remove(event, span: .thisEvent, commit: false)
+            didRemove = true
+        }
+        if didRemove {
+            try store.commit()
         }
     }
 

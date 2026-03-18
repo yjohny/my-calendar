@@ -6,10 +6,6 @@ import SwiftUI
 struct EventLineInfo: Equatable {
     let text: String
     let calendarColor: Color
-
-    static func == (lhs: EventLineInfo, rhs: EventLineInfo) -> Bool {
-        lhs.text == rhs.text
-    }
 }
 
 @MainActor
@@ -125,15 +121,6 @@ final class CalendarStore {
         let key = DateFormatting.normalizeToDay(date)
         touchDate(key)
 
-        // Lazy-load from disk on cache miss
-        if dayTexts[key] == nil, let fileStore {
-            Task {
-                if let text = try? await fileStore.loadJournal(for: key) {
-                    dayTexts[key] = text
-                }
-            }
-        }
-
         let userText = dayTexts[key] ?? ""
         let unmatched = unmatchedEventLines[key] ?? []
 
@@ -149,6 +136,16 @@ final class CalendarStore {
         let unmatchedText = unmatched.map(\.text).joined(separator: "\n")
         parts.append(unmatchedText)
         return parts.joined(separator: "\n")
+    }
+
+    /// Ensure day text is loaded from disk if not already cached
+    func ensureLoaded(for date: Date) async {
+        let key = DateFormatting.normalizeToDay(date)
+        if dayTexts[key] == nil, let fileStore {
+            if let text = try? await fileStore.loadJournal(for: key), !text.isEmpty {
+                dayTexts[key] = text
+            }
+        }
     }
 
     /// Get the color map for a date (used by StyledTextView to color event lines)
@@ -382,21 +379,26 @@ final class CalendarStore {
             syncTask?.cancel()
             syncTask = Task {
                 try? await Task.sleep(for: .milliseconds(800))
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    // Cancelled by a newer sync — let the newer task handle status
+                    return
+                }
                 syncStatus = .syncing
                 do {
                     try await syncEventsToEventKit(date: key, events: events)
                     await refreshEvents(for: key)
-                    syncStatus = .idle
+                    if !Task.isCancelled {
+                        syncStatus = .idle
+                    }
                 } catch {
-                    syncStatus = .error(Strings.syncFailed)
+                    if !Task.isCancelled {
+                        syncStatus = .error(Strings.syncFailed)
+                    }
                 }
             }
         } else {
-            // No EventKit sync needed — only go idle if no sync task is active
-            if syncTask == nil || syncTask?.isCancelled == true {
-                syncStatus = .idle
-            }
+            // No EventKit sync needed — go idle after file save is scheduled
+            syncStatus = .idle
         }
     }
 
@@ -576,7 +578,7 @@ final class CalendarStore {
     private func scheduleDayTextSave(date: Date, text: String) {
         guard let coalescer, let fileStore else { return }
         Task {
-            await coalescer.enqueue {
+            await coalescer.enqueue(for: date) {
                 try await fileStore.saveJournal(text, for: date)
             }
         }
