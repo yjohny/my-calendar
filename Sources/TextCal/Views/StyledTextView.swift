@@ -16,6 +16,9 @@ struct StyledTextView: View {
     var colorMap: [EventColorKey: Color] = [:]
     var unmatchedEvents: [EventLineInfo] = []
     var conflictingTitles: Set<String> = []
+    /// Called when the user chooses "Move to..." on an event line.
+    /// Parameters: (lineIndex, targetDate)
+    var onMoveEvent: ((Int, Date) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
     /// Pre-parse lines once per data change, not on every render
@@ -40,8 +43,8 @@ struct StyledTextView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             // Render user's text in document order
-            ForEach(parsedLines, id: \.0) { _, parsed in
-                parsedLineView(parsed)
+            ForEach(parsedLines, id: \.0) { index, parsed in
+                parsedLineView(parsed, lineIndex: index)
             }
             // Append any EventKit events not in user's text
             if !unmatchedEvents.isEmpty {
@@ -60,7 +63,7 @@ struct StyledTextView: View {
     }
 
     @ViewBuilder
-    private func parsedLineView(_ parsed: ParsedLine) -> some View {
+    private func parsedLineView(_ parsed: ParsedLine, lineIndex: Int) -> some View {
         switch parsed {
         case .blank:
             Text(" ")
@@ -69,6 +72,7 @@ struct StyledTextView: View {
         case .allDay(let match, let calName):
             let color = lookupColor(title: match.title, isAllDay: true) ?? Color.orange
             allDayView(match: match, calendarColor: color, calendarName: calName)
+                .modifier(MoveEventContextMenu(lineIndex: lineIndex, onMoveEvent: onMoveEvent))
         case .event(let match, let calName):
             let color = lookupColor(
                 title: match.title,
@@ -76,6 +80,7 @@ struct StyledTextView: View {
                 minute: match.timeComponents.minute
             ) ?? Color.accentColor
             eventView(match: match, calendarColor: color, calendarName: calName)
+                .modifier(MoveEventContextMenu(lineIndex: lineIndex, onMoveEvent: onMoveEvent))
         case .note(let text):
             Text(text)
                 .font(.system(.body, design: .rounded))
@@ -246,5 +251,61 @@ struct StyledTextView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .opacity(isRecurring ? 0.7 : 1.0)
             .accessibilityLabel(label)
+    }
+}
+
+/// Adds a "Move to..." context menu to event lines for text-native event moving.
+/// Long-press an event → pick a date → the line is removed from this day and appended to the target day.
+private struct MoveEventContextMenu: ViewModifier {
+    let lineIndex: Int
+    let onMoveEvent: ((Int, Date) -> Void)?
+    @State private var showingDatePicker = false
+    @State private var targetDate = DateFormatting.today
+
+    func body(content: Content) -> some View {
+        if onMoveEvent != nil {
+            content
+                .contextMenu {
+                    Button {
+                        // Tomorrow
+                        if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: DateFormatting.today) {
+                            onMoveEvent?(lineIndex, tomorrow)
+                        }
+                    } label: {
+                        Label(Strings.moveToTomorrow, systemImage: "arrow.right")
+                    }
+                    Button {
+                        showingDatePicker = true
+                    } label: {
+                        Label(Strings.moveToDate, systemImage: "calendar")
+                    }
+                }
+                .sheet(isPresented: $showingDatePicker) {
+                    NavigationStack {
+                        DatePicker(
+                            Strings.moveToDate,
+                            selection: $targetDate,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.graphical)
+                        .padding()
+                        .navigationTitle(Strings.moveToDate)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(Strings.cancel) { showingDatePicker = false }
+                            }
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button(Strings.done) {
+                                    onMoveEvent?(lineIndex, targetDate)
+                                    showingDatePicker = false
+                                }
+                            }
+                        }
+                    }
+                }
+        } else {
+            content
+        }
     }
 }

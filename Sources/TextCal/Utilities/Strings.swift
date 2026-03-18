@@ -46,6 +46,23 @@ enum Strings {
     // MARK: - Unmatched Events
     static let eventsFromOtherCalendars = LocalizedStringKey("From other calendars")
 
+    // MARK: - Move Event
+    static let moveToTomorrow = LocalizedStringKey("Move to Tomorrow")
+    static let moveToDate = LocalizedStringKey("Move to Date...")
+
+    // MARK: - Week View
+    static let weekView = LocalizedStringKey("Week")
+
+    // MARK: - Templates
+    static let templates = LocalizedStringKey("Templates")
+    static let noTemplates = LocalizedStringKey("No Templates")
+    static let noTemplatesDescription = LocalizedStringKey("Save frequently used events as templates for quick insertion.")
+    static let templateName = LocalizedStringKey("Name")
+    static let templateContent = LocalizedStringKey("Content")
+    static let templateContentFooter = LocalizedStringKey("Use event syntax like \"9:00 AM - Meeting\" or plain text.")
+    static let newTemplate = LocalizedStringKey("New Template")
+    static let editTemplate = LocalizedStringKey("Edit Template")
+
     // MARK: - Permission Banner
     static let calendarAccessDenied = LocalizedStringKey("Calendar access denied. Events won't sync.")
 }

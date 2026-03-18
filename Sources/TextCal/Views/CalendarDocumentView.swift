@@ -8,6 +8,7 @@ struct CalendarDocumentView: View {
     @State private var showingSearch = false
     @State private var showingDatePicker = false
     @State private var showingCalendarPicker = false
+    @State private var showingWeekView = false
     @State private var writableCalendars: [EKCalendar] = []
     @State private var defaultCalendarId: String?
     @State private var pickerDate = DateFormatting.today
@@ -184,6 +185,17 @@ struct CalendarDocumentView: View {
                     }
                 }
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingWeekView = true
+                    } label: {
+                        Label("Week", systemImage: "calendar.day.timeline.leading")
+                    }
+                    .accessibilityLabel("Week summary view")
+                    .keyboardShortcut("w", modifiers: .command)
+                }
+            }
             .focusable()
             .onKeyPress(.upArrow) {
                 navigateDay(offset: -1)
@@ -204,6 +216,11 @@ struct CalendarDocumentView: View {
         }
         .sheet(isPresented: $showingDatePicker) {
             DateJumpPicker(selectedDate: $pickerDate) { date in
+                viewModel.jumpTo(date: date)
+            }
+        }
+        .sheet(isPresented: $showingWeekView) {
+            WeekSummaryView(currentDate: currentVisibleDate) { date in
                 viewModel.jumpTo(date: date)
             }
         }

@@ -36,6 +36,7 @@ final class CalendarStore {
     private var fileStore: FileStore?
     private var coalescer: ChangeCoalescer?
     private(set) var calendarSettings: CalendarSettings?
+    private(set) var templateStore: TemplateStore = TemplateStore()
 
     /// Debounce EventKit sync to avoid re-syncing on every keystroke
     private var syncTask: Task<Void, Never>?
@@ -408,6 +409,30 @@ final class CalendarStore {
             // No EventKit sync needed — go idle after file save is scheduled
             syncStatus = .idle
         }
+    }
+
+    /// Move a line from one day's text to another day.
+    /// Removes the line at `lineIndex` from `sourceDate` and appends it to `targetDate`.
+    func moveEventLine(from sourceDate: Date, lineIndex: Int, to targetDate: Date) {
+        let sourceKey = DateFormatting.normalizeToDay(sourceDate)
+        let targetKey = DateFormatting.normalizeToDay(targetDate)
+
+        guard let sourceText = dayTexts[sourceKey] else { return }
+        var lines = sourceText.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return }
+
+        let movedLine = lines.remove(at: lineIndex)
+        let newSourceText = lines.joined(separator: "\n")
+        update(date: sourceDate, text: newSourceText)
+
+        let targetText = dayTexts[targetKey] ?? ""
+        let newTargetText: String
+        if targetText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            newTargetText = movedLine
+        } else {
+            newTargetText = targetText + "\n" + movedLine
+        }
+        update(date: targetDate, text: newTargetText)
     }
 
     /// Retry the last failed sync operation
