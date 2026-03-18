@@ -1,7 +1,7 @@
 import Foundation
 
 actor ChangeCoalescer {
-    private var pendingTask: Task<Void, Never>?
+    private var pendingTasks: [Date: Task<Void, Never>] = [:]
     private let delay: Duration = .milliseconds(500)
     private var onError: (@Sendable (Error) -> Void)?
 
@@ -9,9 +9,9 @@ actor ChangeCoalescer {
         self.onError = handler
     }
 
-    func enqueue(save: @escaping @Sendable () async throws -> Void) {
-        pendingTask?.cancel()
-        pendingTask = Task {
+    func enqueue(for date: Date, save: @escaping @Sendable () async throws -> Void) {
+        pendingTasks[date]?.cancel()
+        pendingTasks[date] = Task {
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled else { return }
             do {
@@ -24,8 +24,11 @@ actor ChangeCoalescer {
 
     /// Force any pending save to execute immediately
     func flush(save: @escaping @Sendable () async throws -> Void) {
-        pendingTask?.cancel()
-        pendingTask = Task {
+        for (date, task) in pendingTasks {
+            task.cancel()
+            pendingTasks.removeValue(forKey: date)
+        }
+        pendingTasks[Date.distantPast] = Task {
             do {
                 try await save()
             } catch {
