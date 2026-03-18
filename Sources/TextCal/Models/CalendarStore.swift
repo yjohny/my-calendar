@@ -453,7 +453,7 @@ final class CalendarStore {
                 if matchesExistingRecurring(event, existing: existingRecurring, date: date) {
                     continue
                 }
-                await saveEventToKit(event, date: date, calendar: defaultCal, ekManager: ekManager)
+                try await saveEventToKit(event, date: date, calendar: defaultCal, ekManager: ekManager)
             }
         }
 
@@ -463,12 +463,12 @@ final class CalendarStore {
             if matchesExistingEvent(event, existing: existingInCal, date: date) {
                 continue  // already exists, don't duplicate
             }
-            await saveEventToKit(event, date: date, calendar: cal, ekManager: ekManager)
+            try await saveEventToKit(event, date: date, calendar: cal, ekManager: ekManager)
         }
     }
 
     /// Save a single parsed event to EventKit
-    private func saveEventToKit(_ event: ParsedEventGroup, date: Date, calendar: EKCalendar, ekManager: EventKitManager) async {
+    private func saveEventToKit(_ event: ParsedEventGroup, date: Date, calendar: EKCalendar, ekManager: EventKitManager) async throws {
         let ekRule: EKRecurrenceRule?
         if let recurrence = event.recurrence {
             ekRule = EventKitSync.ekRecurrenceRule(from: recurrence)
@@ -476,7 +476,7 @@ final class CalendarStore {
             ekRule = nil
         }
         let notes = event.notes.isEmpty ? nil : event.notes.joined(separator: "\n")
-        await ekManager.saveEvent(
+        try await ekManager.saveEvent(
             title: event.title,
             date: date,
             startTime: event.startTime,
@@ -556,8 +556,8 @@ final class CalendarStore {
     }
 
     /// Search all day texts for lines containing the query (case-insensitive).
-    /// Returns results sorted by date descending (most recent first).
-    func searchDayTexts(query: String) -> [SearchResult] {
+    /// Returns up to `maxResults` results sorted by date descending (most recent first).
+    func searchDayTexts(query: String, maxResults: Int = 50) -> [SearchResult] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         let lowered = query.lowercased()
         var results: [SearchResult] = []
@@ -570,7 +570,11 @@ final class CalendarStore {
             }
         }
 
-        return results.sorted { $0.date > $1.date }
+        results.sort { $0.date > $1.date }
+        if results.count > maxResults {
+            results = Array(results.prefix(maxResults))
+        }
+        return results
     }
 
     // MARK: - Persistence

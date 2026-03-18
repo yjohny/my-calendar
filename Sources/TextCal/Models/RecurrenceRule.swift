@@ -44,7 +44,8 @@ struct RecurrenceRule: Equatable, Codable {
         case .biweekly(let targetWeekday):
             let weekday = calendar.component(.weekday, from: date)
             guard weekday == targetWeekday else { return false }
-            let weeks = calendar.dateComponents([.weekOfYear], from: sourceDate, to: date).weekOfYear ?? 0
+            let days = calendar.dateComponents([.day], from: sourceDate, to: date).day ?? 0
+            let weeks = days / 7
             return weeks % 2 == 0
 
         case .monthly(let targetDay):

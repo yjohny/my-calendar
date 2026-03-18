@@ -93,8 +93,10 @@ actor EventKitManager {
         notes: String?,
         recurrenceRule: EKRecurrenceRule?,
         calendar: EKCalendar? = nil
-    ) -> EKEvent? {
-        guard let cal = calendar ?? getOrCreateCalendar() else { return nil }
+    ) throws -> EKEvent {
+        guard let cal = calendar ?? getOrCreateCalendar() else {
+            throw EventKitError.noCalendar
+        }
 
         let event = EKEvent(eventStore: store)
         event.title = title
@@ -131,12 +133,12 @@ actor EventKitManager {
             event.recurrenceRules = [rule]
         }
 
-        do {
-            try store.save(event, span: .thisEvent, commit: true)
-            return event
-        } catch {
-            return nil
-        }
+        try store.save(event, span: .thisEvent, commit: true)
+        return event
+    }
+
+    enum EventKitError: Error {
+        case noCalendar
     }
 
     /// Remove an event
@@ -147,7 +149,9 @@ actor EventKitManager {
     /// Remove non-recurring events in TextCal calendar for a given date.
     /// Recurring event occurrences are left untouched to avoid duplication bugs.
     func removeTextCalEvents(for date: Date) throws {
-        guard let cal = getOrCreateCalendar() else { return }
+        guard let cal = getOrCreateCalendar() else {
+            throw EventKitError.noCalendar
+        }
         try removeManagedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
     }
 
