@@ -65,7 +65,8 @@ struct DayTextEditor: View {
                 StyledTextView(
                     text: text,
                     colorMap: colorMap,
-                    unmatchedEvents: unmatchedEvents
+                    unmatchedEvents: unmatchedEvents,
+                    conflictingTitles: detectConflicts(in: text)
                 )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 6)

@@ -14,6 +14,8 @@ enum Strings {
     static let searchDescription = LocalizedStringKey("Find events and notes across all days")
     static let searchNavTitle = LocalizedStringKey("Search")
 
+    static let fromOtherApps = LocalizedStringKey("From Other Apps")
+
     // MARK: - Editor
     static let editorPlaceholder = LocalizedStringKey("Type events like 9:00 AM - Meeting, or just write...")
 
@@ -23,6 +25,7 @@ enum Strings {
     static let today = LocalizedStringKey("Today")
     static let settings = LocalizedStringKey("Settings")
     static let dismiss = LocalizedStringKey("Dismiss")
+    static let retry = LocalizedStringKey("Retry")
 
     // MARK: - Calendar Picker
     static let defaultCalendar = LocalizedStringKey("Default Calendar")
@@ -35,6 +38,13 @@ enum Strings {
     static let searchButton = LocalizedStringKey("Search")
     static let calendarsButton = LocalizedStringKey("Calendars")
     static let helpButton = LocalizedStringKey("Help")
+
+    // MARK: - Calendar Visibility
+    static let calendarVisibility = LocalizedStringKey("Visibility")
+    static let calendarVisibilityFooter = LocalizedStringKey("Hidden calendars won't appear in your daily view.")
+
+    // MARK: - Unmatched Events
+    static let eventsFromOtherCalendars = LocalizedStringKey("From other calendars")
 
     // MARK: - Permission Banner
     static let calendarAccessDenied = LocalizedStringKey("Calendar access denied. Events won't sync.")

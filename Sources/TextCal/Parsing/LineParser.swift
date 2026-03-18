@@ -9,12 +9,14 @@ struct EventLineMatch {
     let endTimeComponents: DateComponents?
     let recurrence: RecurrenceRule?
     let calendarName: String?
+    let alarmOffset: TimeInterval?
 }
 
 struct AllDayMatch {
     let title: String
     let recurrence: RecurrenceRule?
     let calendarName: String?
+    let alarmOffset: TimeInterval?
 }
 
 enum LineParser {
@@ -52,7 +54,7 @@ enum LineParser {
         if let suffix = extractCalendarSuffix(line) {
             let remainder = suffix.remainder
             if let match = parseAllDayLine(remainder) {
-                return .allDay(title: match.title, recurrence: match.recurrence, calendarName: suffix.calendarName)
+                return .allDay(title: match.title, recurrence: match.recurrence, calendarName: suffix.calendarName, alarmOffset: match.alarmOffset)
             }
             if let match = parseEventLine(remainder) {
                 return .event(
@@ -60,7 +62,8 @@ enum LineParser {
                     endTime: match.endTimeComponents,
                     title: match.title,
                     recurrence: match.recurrence,
-                    calendarName: suffix.calendarName
+                    calendarName: suffix.calendarName,
+                    alarmOffset: match.alarmOffset
                 )
             }
             // Suffix didn't follow an event — fall through to normal parsing
@@ -72,7 +75,7 @@ enum LineParser {
         if let prefix = extractCalendarPrefix(line) {
             let remainder = prefix.remainder
             if let match = parseAllDayLine(remainder) {
-                return .allDay(title: match.title, recurrence: match.recurrence, calendarName: prefix.calendarName)
+                return .allDay(title: match.title, recurrence: match.recurrence, calendarName: prefix.calendarName, alarmOffset: match.alarmOffset)
             }
             if let match = parseEventLine(remainder) {
                 return .event(
@@ -80,7 +83,8 @@ enum LineParser {
                     endTime: match.endTimeComponents,
                     title: match.title,
                     recurrence: match.recurrence,
-                    calendarName: prefix.calendarName
+                    calendarName: prefix.calendarName,
+                    alarmOffset: match.alarmOffset
                 )
             }
             // Prefix didn't precede an event — fall through to normal parsing
@@ -88,7 +92,7 @@ enum LineParser {
 
         // Check all-day event first (* prefix)
         if let match = parseAllDayLine(line) {
-            return .allDay(title: match.title, recurrence: match.recurrence, calendarName: nil)
+            return .allDay(title: match.title, recurrence: match.recurrence, calendarName: nil, alarmOffset: match.alarmOffset)
         }
 
         if let match = parseEventLine(line) {
@@ -97,7 +101,8 @@ enum LineParser {
                 endTime: match.endTimeComponents,
                 title: match.title,
                 recurrence: match.recurrence,
-                calendarName: nil
+                calendarName: nil,
+                alarmOffset: match.alarmOffset
             )
         }
 
@@ -117,8 +122,9 @@ enum LineParser {
         }
 
         var title = String(match.1)
+        let alarm = extractAlarm(from: &title)
         let recurrence = extractRecurrence(from: &title)
-        return AllDayMatch(title: title, recurrence: recurrence, calendarName: nil)
+        return AllDayMatch(title: title, recurrence: recurrence, calendarName: nil, alarmOffset: alarm)
     }
 
     /// Try to parse a line as an event line. Returns match details or nil.
@@ -142,6 +148,7 @@ enum LineParser {
                 return nil
             }
 
+            let alarm = extractAlarm(from: &title)
             let recurrence = extractRecurrence(from: &title)
 
             let startText = startAmpm != nil ? "\(startTimeStr) \(startAmpm!)" : startTimeStr
@@ -155,7 +162,8 @@ enum LineParser {
                 timeComponents: startComponents,
                 endTimeComponents: endComponents,
                 recurrence: recurrence,
-                calendarName: nil
+                calendarName: nil,
+                alarmOffset: alarm
             )
         }
 
@@ -173,6 +181,7 @@ enum LineParser {
             return nil
         }
 
+        let alarm = extractAlarm(from: &title)
         let recurrence = extractRecurrence(from: &title)
         let timeText = ampm != nil ? "\(timeStr) \(ampm!)" : timeStr
 
@@ -184,8 +193,22 @@ enum LineParser {
             timeComponents: components,
             endTimeComponents: nil,
             recurrence: recurrence,
-            calendarName: nil
+            calendarName: nil,
+            alarmOffset: alarm
         )
+    }
+
+    /// Extract alarm pattern like "(!15m)" from end of title, modifying the title in place.
+    /// Returns the alarm offset in seconds (negative), or nil.
+    static func extractAlarm(from title: inout String) -> TimeInterval? {
+        guard let match = title.firstMatch(of: TimePatterns.alarmPattern) else { return nil }
+        let alarmText = "\(match.1)\(match.2)"
+        if let offset = TimePatterns.parseAlarm(alarmText) {
+            title = title.replacingOccurrences(of: String(match.0), with: "")
+                .trimmingCharacters(in: .whitespaces)
+            return offset
+        }
+        return nil
     }
 
     /// Extract recurrence pattern from end of title, modifying the title in place

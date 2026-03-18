@@ -22,6 +22,24 @@ enum TimePatterns {
     /// Recurrence pattern at end of title: "(every weekday)", "(daily)", etc.
     static let recurrencePattern = /\(([^)]+)\)\s*$/
 
+    /// Alarm/reminder pattern: "(!15m)", "(!1h)", "(!30m)", "(!0m)" for at time of event
+    static let alarmPattern = /\(!(\d+)(m|h)\)\s*$/
+
+    /// Parse an alarm string like "15m" or "1h" into a negative TimeInterval (seconds before event)
+    static func parseAlarm(_ text: String) -> TimeInterval? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces).lowercased()
+        guard let match = trimmed.wholeMatch(of: /(\d+)(m|h)/) else { return nil }
+        guard let value = Int(match.1) else { return nil }
+        let unit = String(match.2)
+        let seconds: Int
+        switch unit {
+        case "m": seconds = value * 60
+        case "h": seconds = value * 3600
+        default: return nil
+        }
+        return TimeInterval(-seconds)
+    }
+
     /// Parses a time string like "9:00 AM" or "14:30" into DateComponents
     static func parseTime(_ timeStr: String, ampm: String? = nil) -> DateComponents? {
         let parts = timeStr.split(separator: ":")

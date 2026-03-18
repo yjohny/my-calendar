@@ -117,7 +117,7 @@ struct CalendarDocumentView: View {
                     Button {
                         Task {
                             if let ekManager = store.eventKitManager {
-                                writableCalendars = await ekManager.writableCalendars()
+                                writableCalendars = await ekManager.allCalendars()
                             }
                             defaultCalendarId = store.calendarSettings?.defaultCalendarIdentifier
                             showingCalendarPicker = true
@@ -148,19 +148,29 @@ struct CalendarDocumentView: View {
                             Text(message)
                                 .font(.system(.caption, design: .rounded))
                                 .foregroundStyle(.red)
+                            Button {
+                                store.syncStatus = .idle
+                                Task { await store.retryLastSync() }
+                            } label: {
+                                Text(Strings.retry)
+                                    .font(.system(.caption, design: .rounded))
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.blue)
+                            }
+                            .accessibilityLabel("Retry sync")
+                            Button {
+                                store.syncStatus = .idle
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel("Dismiss error")
                         }
                         .transition(.opacity)
-                        .onTapGesture {
-                            store.syncStatus = .idle
-                        }
-                        .task {
-                            try? await Task.sleep(for: .seconds(5))
-                            if case .error = store.syncStatus {
-                                store.syncStatus = .idle
-                            }
-                        }
+                        .accessibilityElement(children: .combine)
                         .accessibilityLabel("Error: \(message)")
-                        .accessibilityHint("Tap to dismiss")
+                        .accessibilityHint("Tap retry to try again, or dismiss")
                     } else if store.syncStatus != .idle {
                         HStack(spacing: 6) {
                             ProgressView()
@@ -200,7 +210,8 @@ struct CalendarDocumentView: View {
         .sheet(isPresented: $showingCalendarPicker) {
             CalendarPickerView(
                 calendars: writableCalendars,
-                selectedIdentifier: $defaultCalendarId
+                selectedIdentifier: $defaultCalendarId,
+                calendarSettings: store.calendarSettings
             )
             .onDisappear {
                 store.calendarSettings?.defaultCalendarIdentifier = defaultCalendarId

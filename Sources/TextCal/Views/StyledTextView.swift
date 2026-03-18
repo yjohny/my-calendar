@@ -15,6 +15,7 @@ struct StyledTextView: View {
     let text: String
     var colorMap: [EventColorKey: Color] = [:]
     var unmatchedEvents: [EventLineInfo] = []
+    var conflictingTitles: Set<String> = []
     @Environment(\.colorScheme) private var colorScheme
 
     /// Pre-parse lines once per data change, not on every render
@@ -43,8 +44,17 @@ struct StyledTextView: View {
                 parsedLineView(parsed)
             }
             // Append any EventKit events not in user's text
+            if !unmatchedEvents.isEmpty {
+                Text(Strings.eventsFromOtherCalendars)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                    .accessibilityAddTraits(.isHeader)
+            }
             ForEach(Array(unmatchedEvents.enumerated()), id: \.offset) { _, info in
                 styledLine(info.text, overrideColor: info.calendarColor)
+                    .accessibilityLabel("From other calendar: \(info.text)")
             }
         }
     }
@@ -72,7 +82,7 @@ struct StyledTextView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .journal(let text):
-            Text(text)
+            markdownText(text)
                 .font(.system(.body, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -141,6 +151,14 @@ struct StyledTextView: View {
         return color
     }
 
+    /// Render text with basic markdown formatting (bold, italic, strikethrough)
+    private func markdownText(_ text: String) -> Text {
+        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            return Text(attributed)
+        }
+        return Text(text)
+    }
+
     /// Strip `[CalendarName]` suffix or prefix from a line for display purposes
     private func stripCalendarPrefix(_ line: String) -> (line: String, calendarName: String?) {
         // Try suffix first (new format)
@@ -175,14 +193,17 @@ struct StyledTextView: View {
             }
             return t
         }()
-        let label = "All day event: \(match.title)" + (calendarName.map { ", calendar \($0)" } ?? "")
+        let isRecurring = match.recurrence != nil
+        let label = "All day event: \(match.title)" + (isRecurring ? ", repeating" : "") + (calendarName.map { ", calendar \($0)" } ?? "")
         result
             .frame(maxWidth: .infinity, alignment: .leading)
+            .opacity(isRecurring ? 0.7 : 1.0)
             .accessibilityLabel(label)
     }
 
     @ViewBuilder
     private func eventView(match: EventLineMatch, calendarColor: Color, calendarName: String? = nil) -> some View {
+        let hasConflict = conflictingTitles.contains(match.title)
         let result: Text = {
             var t = Text(match.timeText)
                 .font(.system(.body, design: .monospaced))
@@ -212,11 +233,18 @@ struct StyledTextView: View {
                     .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(.quaternary)
             }
+            if hasConflict {
+                t = t + Text("  ⚠")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.orange)
+            }
             return t
         }()
-        let label = "\(match.timeText) \(match.title)" + (calendarName.map { ", calendar \($0)" } ?? "")
+        let isRecurring = match.recurrence != nil
+        let label = "\(match.timeText) \(match.title)" + (isRecurring ? ", repeating" : "") + (hasConflict ? ", overlaps with another event" : "") + (calendarName.map { ", calendar \($0)" } ?? "")
         result
             .frame(maxWidth: .infinity, alignment: .leading)
+            .opacity(isRecurring ? 0.7 : 1.0)
             .accessibilityLabel(label)
     }
 }

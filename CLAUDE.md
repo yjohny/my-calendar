@@ -55,7 +55,15 @@ Xcode project: `TextCal.xcodeproj`
 - **Accessibility**: All interactive views have VoiceOver labels and hints. `DateScrubber` and `CalendarDocumentView` respect `@Environment(\.accessibilityReduceMotion)` to skip animations. `CalendarPickerView` uses `@ScaledMetric` for the color dot size to support Dynamic Type. When adding new views, always include `.accessibilityLabel()` and `.accessibilityHint()` where appropriate.
 - **Localization**: All user-facing strings are centralized in `Utilities/Strings.swift` as `LocalizedStringKey` constants. When adding new strings, add them to `Strings` rather than hardcoding in views.
 
+- **Search: EventKit events** — `SearchView` searches both `dayTexts` and EventKit events (from other apps) via `CalendarStore.searchEventKitEvents()`. EventKit results appear in a separate "From Other Apps" section below user text matches.
+- **Calendar visibility toggles** — `CalendarPickerView` now has a "Visibility" section where users can toggle calendars on/off. Hidden calendar identifiers are persisted in `CalendarSettings.hiddenCalendarIdentifiers` (UserDefaults). `EventKitManager.events(for:excludingCalendars:)` filters them out.
+- **Conflict & overlap warnings** — `detectConflicts(in:)` (free function in CalendarStore.swift) compares parsed event time ranges and returns conflicting titles. `StyledTextView` shows a warning indicator on overlapping events.
+- **Faded recurring events** — `StyledTextView` applies `.opacity(0.7)` to recurring event lines (those with a recurrence rule), matching what `SyntaxHelpView` documents.
+- **Sync error recovery** — Error banners in the toolbar no longer auto-dismiss after 5 seconds. Instead they show a "Retry" button (calls `CalendarStore.retryLastSync()`) and a dismiss "X" button. The last failed sync date is tracked for retry.
+- **Unmatched event accessibility** — `StyledTextView` shows a "From other calendars" header before unmatched EventKit events, with `.accessibilityAddTraits(.isHeader)`. Each unmatched event gets a "From other calendar:" VoiceOver label.
+- **Markdown journal text** — Journal lines are rendered via `AttributedString(markdown:)` with `.inlineOnlyPreservingWhitespace`, supporting **bold**, *italic*, ~~strikethrough~~ etc. Raw text is preserved in files.
+- **Alarm/reminder syntax** — `(!15m)`, `(!1h)`, `(!0m)` at end of event titles set `EKAlarm` on the event during sync. Parsed by `LineParser.extractAlarm()` / `TimePatterns.parseAlarm()`. Documented in `SyntaxHelpView`.
+
 ## Future Improvements
-- **Search: EventKit events** — Currently search only covers `dayTexts` (user-typed text). Could also search unmatched EventKit events (from other apps) that haven't been typed into TextCal yet.
 - **Smarter text input** — Calendar name auto-complete when typing `[`, natural language shortcuts (e.g., "lunch tomorrow at noon"), or smart suggestions based on past events.
 - **Undo/redo** — SwiftUI `TextEditor` supports system undo, but `DayTextEditor.refreshState()` overwrites state on dismiss which can clear the undo stack. Wire up `UndoManager` properly.

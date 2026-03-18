@@ -5,6 +5,7 @@ struct SearchView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var results: [CalendarStore.SearchResult] = []
+    @State private var eventKitResults: [CalendarStore.EventKitSearchResult] = []
     let onSelect: (Date) -> Void
 
     var body: some View {
@@ -40,10 +41,11 @@ struct SearchView: View {
                         systemImage: "magnifyingglass",
                         description: Text(Strings.searchDescription)
                     )
-                } else if results.isEmpty {
+                } else if results.isEmpty && eventKitResults.isEmpty {
                     ContentUnavailableView.search(text: query)
                 } else {
                     List {
+                        // User text results
                         ForEach(results, id: \.date) { result in
                             Section {
                                 ForEach(Array(result.matchingLines.enumerated()), id: \.offset) { _, line in
@@ -70,6 +72,38 @@ struct SearchView: View {
                                 dismiss()
                             }
                         }
+
+                        // EventKit-only results
+                        if !eventKitResults.isEmpty {
+                            Section {
+                                ForEach(eventKitResults, id: \.date) { result in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Button {
+                                            onSelect(result.date)
+                                            dismiss()
+                                        } label: {
+                                            HStack {
+                                                Text(DateFormatting.headerString(for: result.date))
+                                                    .font(.system(.caption, design: .rounded))
+                                                    .fontWeight(.semibold)
+                                                    .foregroundStyle(.secondary)
+                                                Spacer()
+                                                Image(systemName: "chevron.right")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                        }
+                                        ForEach(Array(result.matchingLines.enumerated()), id: \.offset) { _, line in
+                                            highlightedLine(line)
+                                        }
+                                    }
+                                }
+                            } header: {
+                                Label(Strings.fromOtherApps, systemImage: "calendar.badge.plus")
+                                    .font(.system(.subheadline, design: .rounded))
+                                    .fontWeight(.semibold)
+                            }
+                        }
                     }
                     .listStyle(.insetGrouped)
                 }
@@ -88,6 +122,7 @@ struct SearchView: View {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
             results = store.searchDayTexts(query: query)
+            eventKitResults = await store.searchEventKitEvents(query: query)
         }
     }
 

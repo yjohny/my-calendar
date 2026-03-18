@@ -66,20 +66,33 @@ actor EventKitManager {
         }
     }
 
-    /// Fetch events for a specific date
-    func events(for date: Date) -> [EKEvent] {
+    /// Fetch events for a specific date, optionally excluding hidden calendars
+    func events(for date: Date, excludingCalendars hidden: Set<String> = []) -> [EKEvent] {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: date)
         guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return [] }
 
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
-        return store.events(matching: predicate).sorted { $0.startDate < $1.startDate }
+        var results = store.events(matching: predicate)
+        if !hidden.isEmpty {
+            results = results.filter { !hidden.contains($0.calendar.calendarIdentifier) }
+        }
+        return results.sorted { $0.startDate < $1.startDate }
     }
 
-    /// Fetch events for a date range
-    func events(from start: Date, to end: Date) -> [EKEvent] {
+    /// Fetch events for a date range, optionally excluding hidden calendars
+    func events(from start: Date, to end: Date, excludingCalendars hidden: Set<String> = []) -> [EKEvent] {
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
-        return store.events(matching: predicate)
+        var results = store.events(matching: predicate)
+        if !hidden.isEmpty {
+            results = results.filter { !hidden.contains($0.calendar.calendarIdentifier) }
+        }
+        return results
+    }
+
+    /// Returns all calendars (writable and read-only) for the visibility picker
+    func allCalendars() -> [EKCalendar] {
+        store.calendars(for: .event)
     }
 
     /// Create or update an event. Uses the provided calendar, or falls back to TextCal.
@@ -92,7 +105,8 @@ actor EventKitManager {
         isAllDay: Bool,
         notes: String?,
         recurrenceRule: EKRecurrenceRule?,
-        calendar: EKCalendar? = nil
+        calendar: EKCalendar? = nil,
+        alarmOffset: TimeInterval? = nil
     ) throws -> EKEvent {
         guard let cal = calendar ?? getOrCreateCalendar() else {
             throw EventKitError.noCalendar
@@ -131,6 +145,10 @@ actor EventKitManager {
 
         if let rule = recurrenceRule {
             event.recurrenceRules = [rule]
+        }
+
+        if let alarmOffset {
+            event.addAlarm(EKAlarm(relativeOffset: alarmOffset))
         }
 
         try store.save(event, span: .thisEvent, commit: true)
@@ -181,6 +199,15 @@ actor EventKitManager {
     /// Fetch events for a specific date in the specified calendar
     func managedEvents(for date: Date, calendarIdentifier: String) -> [EKEvent] {
         events(for: date).filter { $0.calendar.calendarIdentifier == calendarIdentifier }
+    }
+
+    /// Search events across a date range, filtering by title (case-insensitive)
+    func searchEvents(query: String, from start: Date, to end: Date) -> [EKEvent] {
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+        let allEvents = store.events(matching: predicate)
+        let lowered = query.lowercased()
+        return allEvents.filter { ($0.title ?? "").lowercased().contains(lowered) }
+            .sorted { $0.startDate < $1.startDate }
     }
 
     /// Check if the user has granted calendar access
