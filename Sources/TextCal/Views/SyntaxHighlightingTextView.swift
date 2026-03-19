@@ -221,8 +221,10 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                 highlightUnrecognizedRecurrence(match.title, match.recurrence, storage: storage, nsString: nsString, lineRange: lineRange)
                 highlightUnknownCalendarName(calendarName, in: line, storage: storage, nsString: nsString, lineRange: lineRange)
             } else if line.hasPrefix("  ") {
-                // Note line (indented)
-                storage.addAttribute(.foregroundColor, value: UIColor.secondaryLabel, range: lineRange)
+                // Note line (indented) — italic + tertiary to distinguish from journal
+                let italicFont = UIFont.italicSystemFont(ofSize: bodySize)
+                storage.addAttribute(.font, value: italicFont, range: lineRange)
+                storage.addAttribute(.foregroundColor, value: UIColor.tertiaryLabel, range: lineRange)
                 if eventsOnly {
                     storage.addAttribute(.foregroundColor, value: UIColor.clear, range: lineRange)
                 }

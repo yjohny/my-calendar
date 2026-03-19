@@ -34,8 +34,8 @@ struct DateHeaderView: View {
             Spacer()
         }
         .padding(.horizontal, 20)
-        .padding(.top, 20)
-        .padding(.bottom, 4)
+        .padding(.top, 28)
+        .padding(.bottom, 8)
         .contentShape(Rectangle())
         .onTapGesture {
             onTap?()

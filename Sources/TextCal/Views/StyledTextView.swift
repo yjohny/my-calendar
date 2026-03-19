@@ -43,7 +43,7 @@ struct StyledTextView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 7) {
             // Render user's text in document order
             ForEach(parsedLines, id: \.0) { index, parsed in
                 parsedLineView(parsed, lineIndex: index)
@@ -89,7 +89,8 @@ struct StyledTextView: View {
             if !eventsOnly {
                 Text(text)
                     .font(.system(.body, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .italic()
+                    .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         case .journal(let text):
@@ -123,7 +124,8 @@ struct StyledTextView: View {
         } else if displayLine.hasPrefix("  ") {
             Text(displayLine)
                 .font(.system(.body, design: .rounded))
-                .foregroundStyle(.secondary)
+                .italic()
+                .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text(displayLine)
@@ -223,7 +225,7 @@ struct StyledTextView: View {
                 let isUnknown = isUnknownCalendar(calName)
                 t = t + Text("  \(calName)")
                     .font(.system(.caption2, design: .rounded))
-                    .foregroundStyle(isUnknown ? AnyShapeStyle(.orange) : AnyShapeStyle(.quaternary))
+                    .foregroundStyle(isUnknown ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary.opacity(0.6)))
             }
             return t
         }()
@@ -271,7 +273,7 @@ struct StyledTextView: View {
                 let isUnknown = isUnknownCalendar(calName)
                 t = t + Text("  \(calName)")
                     .font(.system(.caption2, design: .rounded))
-                    .foregroundStyle(isUnknown ? AnyShapeStyle(.orange) : AnyShapeStyle(.quaternary))
+                    .foregroundStyle(isUnknown ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary.opacity(0.6)))
             }
             if hasConflict {
                 t = t + Text("  ⚠")
