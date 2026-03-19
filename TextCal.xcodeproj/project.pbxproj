@@ -35,6 +35,12 @@
 		A10000000000000000000031 /* DateJumpPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000031 /* DateJumpPicker.swift */; };
 		A10000000000000000000040 /* CalendarSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000040 /* CalendarSettings.swift */; };
 		A10000000000000000000041 /* CalendarPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000041 /* CalendarPickerView.swift */; };
+		A10000000000000000000050 /* EventTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000050 /* EventTemplate.swift */; };
+		A10000000000000000000051 /* AutocompleteOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000051 /* AutocompleteOverlay.swift */; };
+		A10000000000000000000052 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000052 /* SearchView.swift */; };
+		A10000000000000000000053 /* TemplatePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000053 /* TemplatePickerView.swift */; };
+		A10000000000000000000054 /* WeekSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000054 /* WeekSummaryView.swift */; };
+		A10000000000000000000055 /* Strings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000055 /* Strings.swift */; };
 
 /* End PBXBuildFile section */
 
@@ -69,6 +75,12 @@
 		B10000000000000000000031 /* DateJumpPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateJumpPicker.swift; sourceTree = "<group>"; };
 		B10000000000000000000040 /* CalendarSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSettings.swift; sourceTree = "<group>"; };
 		B10000000000000000000041 /* CalendarPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPickerView.swift; sourceTree = "<group>"; };
+		B10000000000000000000050 /* EventTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventTemplate.swift; sourceTree = "<group>"; };
+		B10000000000000000000051 /* AutocompleteOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutocompleteOverlay.swift; sourceTree = "<group>"; };
+		B10000000000000000000052 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		B10000000000000000000053 /* TemplatePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplatePickerView.swift; sourceTree = "<group>"; };
+		B10000000000000000000054 /* WeekSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeekSummaryView.swift; sourceTree = "<group>"; };
+		B10000000000000000000055 /* Strings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Strings.swift; sourceTree = "<group>"; };
 
 /* End PBXFileReference section */
 
@@ -148,6 +160,7 @@
 				B10000000000000000000004 /* CalendarStore.swift */,
 				B10000000000000000000020 /* RecurrenceRule.swift */,
 				B10000000000000000000040 /* CalendarSettings.swift */,
+				B10000000000000000000050 /* EventTemplate.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -176,7 +189,10 @@
 				B10000000000000000000030 /* DateScrubber.swift */,
 				B10000000000000000000031 /* DateJumpPicker.swift */,
 				B10000000000000000000041 /* CalendarPickerView.swift */,
-
+				B10000000000000000000051 /* AutocompleteOverlay.swift */,
+				B10000000000000000000052 /* SearchView.swift */,
+				B10000000000000000000053 /* TemplatePickerView.swift */,
+				B10000000000000000000054 /* WeekSummaryView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -204,6 +220,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000011 /* DateFormatting.swift */,
+				B10000000000000000000055 /* Strings.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -303,7 +320,12 @@
 				A10000000000000000000031 /* DateJumpPicker.swift in Sources */,
 				A10000000000000000000040 /* CalendarSettings.swift in Sources */,
 				A10000000000000000000041 /* CalendarPickerView.swift in Sources */,
-
+				A10000000000000000000050 /* EventTemplate.swift in Sources */,
+				A10000000000000000000051 /* AutocompleteOverlay.swift in Sources */,
+				A10000000000000000000052 /* SearchView.swift in Sources */,
+				A10000000000000000000053 /* TemplatePickerView.swift in Sources */,
+				A10000000000000000000054 /* WeekSummaryView.swift in Sources */,
+				A10000000000000000000055 /* Strings.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
