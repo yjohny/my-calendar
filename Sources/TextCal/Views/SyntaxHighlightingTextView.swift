@@ -9,6 +9,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
     var unmatchedEvents: [EventLineInfo]
     var conflictingTitles: Set<String>
     var eventsOnly: Bool
+    var calendarNames: [String]
     var placeholder: String
     var onTextChange: ((String) -> Void)?
 
@@ -108,7 +109,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
         for line in lines {
             let lineLength = (line as NSString).length
             let lineRange = NSRange(location: location, length: lineLength)
-            let (displayLine, _) = stripCalendarSyntax(line)
+            let (displayLine, calendarName) = stripCalendarSyntax(line)
 
             if line.trimmingCharacters(in: .whitespaces).isEmpty {
                 // Blank line — keep default
@@ -130,6 +131,9 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                 if match.recurrence != nil {
                     storage.addAttribute(.foregroundColor, value: UIColor.label.withAlphaComponent(0.7), range: lineRange)
                 }
+                // Warn about unrecognized recurrence in the title
+                highlightUnrecognizedRecurrence(match.title, match.recurrence, storage: storage, nsString: nsString, lineRange: lineRange)
+                highlightUnknownCalendarName(calendarName, in: line, storage: storage, nsString: nsString, lineRange: lineRange)
                 if conflictingTitles.contains(match.title) {
                     // We can't easily add inline warning icons in plain text, but we could underline
                 }
@@ -141,6 +145,10 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                     minute: match.timeComponents.minute
                 ) ?? UIColor.tintColor
                 let monoFont = UIFont.monospacedDigitSystemFont(ofSize: bodySize, weight: .medium)
+
+                // Use medium weight for the whole event line to distinguish from journal text
+                let mediumFont = UIFont.rounded(ofSize: bodySize, weight: .medium)
+                storage.addAttribute(.font, value: mediumFont, range: lineRange)
 
                 // Find and style the time portion
                 let timeText = match.timeText
@@ -168,6 +176,16 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                     }
                 }
 
+                // Style the separator between time and title with subtle event color
+                let sepSearch = match.endTimeText != nil ? "\(match.endTimeText!)\(match.separator)" : "\(timeText)\(match.separator)"
+                if let sepFullRange = rangeOf(sepSearch, in: nsString, within: lineRange) {
+                    let sepStart = sepFullRange.location + (sepSearch as NSString).length - (match.separator as NSString).length
+                    let sepRange = NSRange(location: sepStart, length: (match.separator as NSString).length)
+                    if sepRange.location + sepRange.length <= storage.length {
+                        storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.4), range: sepRange)
+                    }
+                }
+
                 // Recurrence text in secondary color
                 if let recurrence = match.recurrence {
                     let recText = recurrence.rawText
@@ -185,6 +203,9 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                         storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.7), range: timeRange)
                     }
                 }
+                // Warn about unrecognized recurrence in the title
+                highlightUnrecognizedRecurrence(match.title, match.recurrence, storage: storage, nsString: nsString, lineRange: lineRange)
+                highlightUnknownCalendarName(calendarName, in: line, storage: storage, nsString: nsString, lineRange: lineRange)
             } else if line.hasPrefix("  ") {
                 // Note line (indented)
                 storage.addAttribute(.foregroundColor, value: UIColor.secondaryLabel, range: lineRange)
@@ -242,6 +263,33 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
             return (result.remainder, result.calendarName)
         }
         return (line, nil)
+    }
+
+    /// Highlight [CalendarName] bracket syntax in orange if the name doesn't match any known calendar
+    private func highlightUnknownCalendarName(_ calendarName: String?, in line: String, storage: NSTextStorage, nsString: NSString, lineRange: NSRange) {
+        guard let calName = calendarName else { return }
+        // Check against known calendar names (case-insensitive)
+        let matches = calendarNames.contains { $0.localizedCaseInsensitiveCompare(calName) == .orderedSame }
+        guard !matches else { return }
+        // Find the bracketed text in the original line
+        let bracketText = "[\(calName)]"
+        if let nsRange = rangeOf(bracketText, in: nsString, within: lineRange) {
+            storage.addAttribute(.foregroundColor, value: UIColor.systemOrange, range: nsRange)
+        }
+    }
+
+    /// Highlight parenthesized text that looks like a failed recurrence attempt in orange
+    private func highlightUnrecognizedRecurrence(_ title: String, _ recurrence: RecurrenceRule?, storage: NSTextStorage, nsString: NSString, lineRange: NSRange) {
+        // Only flag if no valid recurrence was parsed
+        guard recurrence == nil else { return }
+        // Check if the title contains parenthesized text at the end that looks like a recurrence
+        guard let parenMatch = title.firstMatch(of: /\(([^)]+)\)\s*$/) else { return }
+        let content = String(parenMatch.1)
+        guard TimePatterns.looksLikeRecurrence(content) else { return }
+        let parenText = String(parenMatch.0)
+        if let nsRange = rangeOf(parenText, in: nsString, within: lineRange) {
+            storage.addAttribute(.foregroundColor, value: UIColor.systemOrange, range: nsRange)
+        }
     }
 
     private func rangeOf(_ needle: String, in haystack: NSString, within range: NSRange) -> NSRange? {

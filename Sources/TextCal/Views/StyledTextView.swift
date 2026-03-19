@@ -16,6 +16,8 @@ struct StyledTextView: View {
     var colorMap: [EventColorKey: Color] = [:]
     var unmatchedEvents: [EventLineInfo] = []
     var conflictingTitles: Set<String> = []
+    var eventsOnly: Bool = false
+    var calendarNames: [String] = []
     /// Called when the user chooses "Move to..." on an event line.
     /// Parameters: (lineIndex, targetDate)
     var onMoveEvent: ((Int, Date) -> Void)?
@@ -66,9 +68,11 @@ struct StyledTextView: View {
     private func parsedLineView(_ parsed: ParsedLine, lineIndex: Int) -> some View {
         switch parsed {
         case .blank:
-            Text(" ")
-                .font(.system(.body, design: .rounded))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if !eventsOnly {
+                Text(" ")
+                    .font(.system(.body, design: .rounded))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         case .allDay(let match, let calName):
             let color = lookupColor(title: match.title, isAllDay: true) ?? Color.orange
             allDayView(match: match, calendarColor: color, calendarName: calName)
@@ -82,14 +86,18 @@ struct StyledTextView: View {
             eventView(match: match, calendarColor: color, calendarName: calName)
                 .modifier(MoveEventContextMenu(lineIndex: lineIndex, onMoveEvent: onMoveEvent))
         case .note(let text):
-            Text(text)
-                .font(.system(.body, design: .rounded))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if !eventsOnly {
+                Text(text)
+                    .font(.system(.body, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         case .journal(let text):
-            markdownText(text)
-                .font(.system(.body, design: .rounded))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if !eventsOnly {
+                markdownText(text)
+                    .font(.system(.body, design: .rounded))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -156,6 +164,21 @@ struct StyledTextView: View {
         return color
     }
 
+    /// Check if a calendar name doesn't match any known calendar (case-insensitive)
+    private func isUnknownCalendar(_ name: String) -> Bool {
+        guard !calendarNames.isEmpty else { return false }
+        return !calendarNames.contains { $0.localizedCaseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    /// Returns the parenthesized text if it looks like a failed recurrence attempt, nil otherwise
+    private func unrecognizedRecurrenceText(_ title: String, _ recurrence: RecurrenceRule?) -> String? {
+        guard recurrence == nil else { return nil }
+        guard let parenMatch = title.firstMatch(of: /\(([^)]+)\)\s*$/) else { return nil }
+        let content = String(parenMatch.1)
+        guard TimePatterns.looksLikeRecurrence(content) else { return nil }
+        return String(parenMatch.0)
+    }
+
     /// Render text with basic markdown formatting (bold, italic, strikethrough)
     private func markdownText(_ text: String) -> Text {
         if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
@@ -191,10 +214,16 @@ struct StyledTextView: View {
                     .font(.system(.caption, design: .rounded))
                     .foregroundStyle(.secondary)
             }
+            if let warning = unrecognizedRecurrenceText(match.title, match.recurrence) {
+                t = t + Text("  " + warning)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.orange)
+            }
             if let calName = calendarName {
+                let isUnknown = isUnknownCalendar(calName)
                 t = t + Text("  \(calName)")
                     .font(.system(.caption2, design: .rounded))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(isUnknown ? .orange : .quaternary)
             }
             return t
         }()
@@ -233,10 +262,16 @@ struct StyledTextView: View {
                     .font(.system(.caption, design: .rounded))
                     .foregroundStyle(.secondary)
             }
+            if let warning = unrecognizedRecurrenceText(match.title, match.recurrence) {
+                t = t + Text("  " + warning)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.orange)
+            }
             if let calName = calendarName {
+                let isUnknown = isUnknownCalendar(calName)
                 t = t + Text("  \(calName)")
                     .font(.system(.caption2, design: .rounded))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(isUnknown ? .orange : .quaternary)
             }
             if hasConflict {
                 t = t + Text("  ⚠")
