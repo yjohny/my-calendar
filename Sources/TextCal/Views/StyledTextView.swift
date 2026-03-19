@@ -223,7 +223,7 @@ struct StyledTextView: View {
                 let isUnknown = isUnknownCalendar(calName)
                 t = t + Text("  \(calName)")
                     .font(.system(.caption2, design: .rounded))
-                    .foregroundStyle(isUnknown ? .orange : .quaternary)
+                    .foregroundStyle(isUnknown ? AnyShapeStyle(.orange) : AnyShapeStyle(.quaternary))
             }
             return t
         }()
@@ -271,7 +271,7 @@ struct StyledTextView: View {
                 let isUnknown = isUnknownCalendar(calName)
                 t = t + Text("  \(calName)")
                     .font(.system(.caption2, design: .rounded))
-                    .foregroundStyle(isUnknown ? .orange : .quaternary)
+                    .foregroundStyle(isUnknown ? AnyShapeStyle(.orange) : AnyShapeStyle(.quaternary))
             }
             if hasConflict {
                 t = t + Text("  ⚠")
