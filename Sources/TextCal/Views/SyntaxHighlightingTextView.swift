@@ -1,6 +1,20 @@
 import SwiftUI
 import UIKit
 
+/// UITextView subclass that ensures layout is current before reporting character rects,
+/// preventing RTIDocumentState firstRectForCharacterRange errors from stale geometry.
+private class LayoutAwareTextView: UITextView {
+    override func firstRect(for range: UITextRange) -> CGRect {
+        layoutManager.ensureLayout(for: textContainer)
+        let rect = super.firstRect(for: range)
+        // Return caret rect as fallback if the system got a null/invalid rect
+        if rect.isNull || rect.isInfinite {
+            return caretRect(for: range.start)
+        }
+        return rect
+    }
+}
+
 /// An always-editable text view with inline syntax highlighting for event lines.
 /// Wraps UITextView to support attributed text editing — no mode switching needed.
 struct SyntaxHighlightingTextView: UIViewRepresentable {
@@ -20,7 +34,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
+        let textView = LayoutAwareTextView()
         textView.font = UIFont.systemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular)
         textView.backgroundColor = .clear
         textView.isScrollEnabled = false

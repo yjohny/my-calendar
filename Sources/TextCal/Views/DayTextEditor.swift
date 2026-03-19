@@ -165,14 +165,23 @@ struct DayTextEditor: View {
 
     /// Adopt unmatched EventKit events by appending their text lines into the editable text.
     /// Each event is only adopted once per session (tracked by adoptedUnmatchedKeys).
+    /// Also checks if the event text already exists in the current text to prevent duplicates
+    /// across view recreations (e.g., scrolling away and back).
     private func adoptUnmatchedEvents() {
         guard !unmatchedEvents.isEmpty else { return }
 
+        let existingLines = Set(text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) })
+
         var newLines: [String] = []
         for info in unmatchedEvents {
-            // Use the event text as a dedup key
             let eventKey = info.text
             guard !adoptedUnmatchedKeys.contains(eventKey) else { continue }
+            // Also skip if the event text already exists in the current text
+            let trimmedEvent = eventKey.trimmingCharacters(in: .whitespaces)
+            guard !existingLines.contains(trimmedEvent) else {
+                adoptedUnmatchedKeys.insert(eventKey)
+                continue
+            }
             adoptedUnmatchedKeys.insert(eventKey)
             newLines.append(info.text)
         }

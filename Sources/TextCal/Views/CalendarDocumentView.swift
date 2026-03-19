@@ -1,6 +1,18 @@
 import EventKit
 import SwiftUI
 
+private extension UIView {
+    func findFirstResponder() -> UIResponder? {
+        if isFirstResponder { return self }
+        for subview in subviews {
+            if let responder = subview.findFirstResponder() {
+                return responder
+            }
+        }
+        return nil
+    }
+}
+
 struct CalendarDocumentView: View {
     @Environment(CalendarStore.self) private var store
     @State private var viewModel = CalendarViewModel()
@@ -219,10 +231,13 @@ struct CalendarDocumentView: View {
             }
             .focusable()
             .onKeyPress(.upArrow) {
+                // Don't intercept arrow keys when a text view is being edited
+                guard !isTextViewFirstResponder() else { return .ignored }
                 navigateDay(offset: -1)
                 return .handled
             }
             .onKeyPress(.downArrow) {
+                guard !isTextViewFirstResponder() else { return .ignored }
                 navigateDay(offset: 1)
                 return .handled
             }
@@ -255,6 +270,14 @@ struct CalendarDocumentView: View {
                 store.calendarSettings?.defaultCalendarIdentifier = defaultCalendarId
             }
         }
+    }
+
+    private func isTextViewFirstResponder() -> Bool {
+        guard let keyWindow = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow) else { return false }
+        return keyWindow.findFirstResponder() is UITextView
     }
 
     private func navigateDay(offset: Int) {
