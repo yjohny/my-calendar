@@ -131,20 +131,21 @@ enum LineParser {
     static func parseEventLine(_ line: String) -> EventLineMatch? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-        // Try time range pattern first: "9:00-10:30 AM - Meeting"
+        // Try time range pattern first: "9:00-10:30 AM - Meeting" or "9:00-10:30 - Meeting" (24h)
         if let rangeMatch = trimmed.wholeMatch(of: TimePatterns.timeRangeEventPattern) {
             let startTimeStr = String(rangeMatch.1)
             let startAmpm = rangeMatch.2.map(String.init)
             let endTimeStr = String(rangeMatch.3)
-            let endAmpm = String(rangeMatch.4)
+            let endAmpm = rangeMatch.4.map(String.init)
             let separator = " \(rangeMatch.5) "
             var title = String(rangeMatch.6)
 
             // For ranges like "9:00-10:30 AM", the AM/PM applies to both if start has none
             let effectiveStartAmpm = startAmpm ?? endAmpm
+            let effectiveEndAmpm = endAmpm ?? startAmpm
 
             guard let startComponents = TimePatterns.parseTime(startTimeStr, ampm: effectiveStartAmpm),
-                  let endComponents = TimePatterns.parseTime(endTimeStr, ampm: endAmpm) else {
+                  let endComponents = TimePatterns.parseTime(endTimeStr, ampm: effectiveEndAmpm) else {
                 return nil
             }
 
@@ -152,7 +153,7 @@ enum LineParser {
             let recurrence = extractRecurrence(from: &title)
 
             let startText = startAmpm != nil ? "\(startTimeStr) \(startAmpm!)" : startTimeStr
-            let endText = "\(endTimeStr) \(endAmpm)"
+            let endText = endAmpm != nil ? "\(endTimeStr) \(endAmpm!)" : endTimeStr
 
             return EventLineMatch(
                 timeText: startText,

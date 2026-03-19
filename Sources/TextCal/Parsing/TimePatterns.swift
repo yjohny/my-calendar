@@ -11,10 +11,10 @@ enum TimePatterns {
     /// Full event line: time + separator + title
     static let eventLinePattern = /^\s*(\d{1,2}(?::\d{2})?)\s*(AM|PM|am|pm)?\s*([-–:])\s*(.+)$/
 
-    /// Time range event: "9:00-10:30 AM - Meeting" or "9:00 AM-10:30 AM - Meeting"
+    /// Time range event: "9:00-10:30 AM - Meeting", "9:00 AM-10:30 AM - Meeting", or "9:00-10:30 - Meeting" (24h)
     /// Group 1: start time, Group 2: optional start AM/PM, Group 3: end time,
     /// Group 4: optional end AM/PM, Group 5: separator, Group 6: title
-    static let timeRangeEventPattern = /^\s*(\d{1,2}(?::\d{2})?)\s*(AM|PM|am|pm)?\s*[-–]\s*(\d{1,2}(?::\d{2})?)\s*(AM|PM|am|pm)\s*([-–:])\s*(.+)$/
+    static let timeRangeEventPattern = /^\s*(\d{1,2}(?::\d{2})?)\s*(AM|PM|am|pm)?\s*[-–]\s*(\d{1,2}(?::\d{2})?)\s*(AM|PM|am|pm)?\s*([-–:])\s*(.+)$/
 
     /// All-day event: "* Event title"
     static let allDayPattern = /^\s*\*\s+(.+)$/
@@ -120,5 +120,13 @@ enum TimePatterns {
         }
 
         return nil
+    }
+
+    /// Check if text inside parentheses looks like a recurrence attempt (but didn't parse).
+    /// Used to distinguish "(every wensday)" (typo) from "(optional)" (not a recurrence).
+    static func looksLikeRecurrence(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces).lowercased()
+        let keywords = ["every", "daily", "weekly", "monthly", "yearly", "biweekly", "annually", "weekday"]
+        return keywords.contains(where: { trimmed.hasPrefix($0) || trimmed == $0 })
     }
 }

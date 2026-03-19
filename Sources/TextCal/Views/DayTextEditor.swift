@@ -16,28 +16,46 @@ struct DayTextEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Autocomplete suggestions bar
-            AutocompleteSuggestionsView(suggestions: autocompleteSuggestions) { suggestion in
-                applySuggestion(suggestion)
-            }
-
-            SyntaxHighlightingTextView(
-                text: $text,
-                colorMap: colorMap,
-                unmatchedEvents: [],
-                conflictingTitles: detectConflicts(in: text),
-                eventsOnly: eventsOnly,
-                placeholder: "Type events like 9:00 AM - Meeting, or just write...",
-                onTextChange: { newValue in
-                    store.update(date: date, text: newValue)
-                    updateAutocompleteSuggestions()
+            if eventsOnly {
+                // Read-only filtered view: only shows event lines, collapsed layout
+                StyledTextView(
+                    text: text,
+                    colorMap: colorMap,
+                    conflictingTitles: detectConflicts(in: text),
+                    eventsOnly: true,
+                    calendarNames: calendarNames
+                )
+                .padding(.horizontal, 20)
+                .padding(.vertical, 2)
+                .frame(minHeight: 44)
+                .accessibilityLabel(hasContent
+                    ? "Events for \(DateFormatting.headerString(for: date))"
+                    : "No events for \(DateFormatting.headerString(for: date))")
+            } else {
+                // Autocomplete suggestions bar
+                AutocompleteSuggestionsView(suggestions: autocompleteSuggestions) { suggestion in
+                    applySuggestion(suggestion)
                 }
-            )
-            .frame(minHeight: hasContent ? 44 : 44)
-            .accessibilityLabel(hasContent
-                ? "Events and notes for \(DateFormatting.headerString(for: date))"
-                : "No events for \(DateFormatting.headerString(for: date))")
-            .accessibilityHint("Edit events or notes")
+
+                SyntaxHighlightingTextView(
+                    text: $text,
+                    colorMap: colorMap,
+                    unmatchedEvents: [],
+                    conflictingTitles: detectConflicts(in: text),
+                    eventsOnly: false,
+                    calendarNames: calendarNames,
+                    placeholder: "Type events like 9:00 AM - Meeting, or just write...",
+                    onTextChange: { newValue in
+                        store.update(date: date, text: newValue)
+                        updateAutocompleteSuggestions()
+                    }
+                )
+                .frame(minHeight: hasContent ? 44 : 44)
+                .accessibilityLabel(hasContent
+                    ? "Events and notes for \(DateFormatting.headerString(for: date))"
+                    : "No events for \(DateFormatting.headerString(for: date))")
+                .accessibilityHint("Edit events or notes")
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
