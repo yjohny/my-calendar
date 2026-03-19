@@ -12,6 +12,7 @@ struct DayTextEditor: View {
     @State private var autocompleteSuggestions: [AutocompleteSuggestion] = []
     @State private var calendarNames: [String] = []
     @State private var hasLoaded = false
+    @State private var adoptedUnmatchedKeys: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,7 +24,7 @@ struct DayTextEditor: View {
             SyntaxHighlightingTextView(
                 text: $text,
                 colorMap: colorMap,
-                unmatchedEvents: unmatchedEvents,
+                unmatchedEvents: [],
                 conflictingTitles: detectConflicts(in: text),
                 eventsOnly: eventsOnly,
                 placeholder: "Type events like 9:00 AM - Meeting, or just write...",
@@ -37,23 +38,6 @@ struct DayTextEditor: View {
                 ? "Events and notes for \(DateFormatting.headerString(for: date))"
                 : "No events for \(DateFormatting.headerString(for: date))")
             .accessibilityHint("Edit events or notes")
-
-            // Unmatched EventKit events (from other apps)
-            if !unmatchedEvents.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(Strings.eventsFromOtherCalendars)
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
-                        .accessibilityAddTraits(.isHeader)
-
-                    ForEach(Array(unmatchedEvents.enumerated()), id: \.offset) { _, info in
-                        unmatchedEventLine(info)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 6)
-            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -87,36 +71,7 @@ struct DayTextEditor: View {
     }
 
     private var hasContent: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !unmatchedEvents.isEmpty
-    }
-
-    @ViewBuilder
-    private func unmatchedEventLine(_ info: EventLineInfo) -> some View {
-        let calColor = info.calendarColor
-        if let match = LineParser.parseEventLine(info.text) {
-            (Text(match.timeText)
-                .font(.system(.body, design: .monospaced))
-                .fontWeight(.medium)
-                .foregroundStyle(calColor)
-            + Text(match.separator + match.title)
-                .font(.system(.body, design: .rounded)))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("From other calendar: \(info.text)")
-        } else if let match = LineParser.parseAllDayLine(info.text) {
-            (Text("★ ")
-                .font(.system(.body, design: .rounded))
-                .foregroundStyle(calColor)
-            + Text(match.title)
-                .font(.system(.body, design: .rounded))
-                .fontWeight(.medium))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("From other calendar: \(info.text)")
-        } else {
-            Text(info.text)
-                .font(.system(.body, design: .rounded))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel("From other calendar: \(info.text)")
-        }
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func insertTemplate(_ templateText: String) {
@@ -185,7 +140,30 @@ struct DayTextEditor: View {
             }
             colorMap = store.colorMap(for: refreshDate)
             unmatchedEvents = store.unmatchedEvents(for: refreshDate)
+            adoptUnmatchedEvents()
             hasLoaded = true
         }
+    }
+
+    /// Adopt unmatched EventKit events by appending their text lines into the editable text.
+    /// Each event is only adopted once per session (tracked by adoptedUnmatchedKeys).
+    private func adoptUnmatchedEvents() {
+        guard !unmatchedEvents.isEmpty else { return }
+
+        var newLines: [String] = []
+        for info in unmatchedEvents {
+            // Use the event text as a dedup key
+            let eventKey = info.text
+            guard !adoptedUnmatchedKeys.contains(eventKey) else { continue }
+            adoptedUnmatchedKeys.insert(eventKey)
+            newLines.append(info.text)
+        }
+
+        guard !newLines.isEmpty else { return }
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let separator = trimmed.isEmpty ? "" : "\n"
+        text = trimmed + separator + newLines.joined(separator: "\n")
+        store.update(date: date, text: text)
     }
 }

@@ -23,7 +23,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
         textView.font = UIFont.systemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular)
         textView.backgroundColor = .clear
         textView.isScrollEnabled = false
-        textView.textContainerInset = UIEdgeInsets(top: 6, left: 16, bottom: 6, right: 16)
+        textView.textContainerInset = UIEdgeInsets(top: 2, left: 20, bottom: 8, right: 20)
         textView.textContainer.lineFragmentPadding = 0
         textView.delegate = context.coordinator
         textView.allowsEditingTextAttributes = false
@@ -40,9 +40,9 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
         placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
         textView.addSubview(placeholderLabel)
         NSLayoutConstraint.activate([
-            placeholderLabel.topAnchor.constraint(equalTo: textView.topAnchor, constant: 6),
-            placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor, constant: 16),
-            placeholderLabel.trailingAnchor.constraint(equalTo: textView.trailingAnchor, constant: -16),
+            placeholderLabel.topAnchor.constraint(equalTo: textView.topAnchor, constant: 2),
+            placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor, constant: 20),
+            placeholderLabel.trailingAnchor.constraint(equalTo: textView.trailingAnchor, constant: -20),
         ])
 
         context.coordinator.textView = textView
