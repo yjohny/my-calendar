@@ -53,6 +53,10 @@ enum Strings {
     // MARK: - Week View
     static let weekView = LocalizedStringKey("Week")
 
+    // MARK: - Events Only Filter
+    static let eventsOnlyLabel = LocalizedStringKey("Events Only")
+    static let showAllContent = LocalizedStringKey("Show All")
+
     // MARK: - Templates
     static let templates = LocalizedStringKey("Templates")
     static let noTemplates = LocalizedStringKey("No Templates")

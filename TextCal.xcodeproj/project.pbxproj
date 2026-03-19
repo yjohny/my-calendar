@@ -41,6 +41,7 @@
 		A10000000000000000000053 /* TemplatePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000053 /* TemplatePickerView.swift */; };
 		A10000000000000000000054 /* WeekSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000054 /* WeekSummaryView.swift */; };
 		A10000000000000000000055 /* Strings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000055 /* Strings.swift */; };
+		A10000000000000000000060 /* SyntaxHighlightingTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000060 /* SyntaxHighlightingTextView.swift */; };
 
 /* End PBXBuildFile section */
 
@@ -81,6 +82,7 @@
 		B10000000000000000000053 /* TemplatePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplatePickerView.swift; sourceTree = "<group>"; };
 		B10000000000000000000054 /* WeekSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeekSummaryView.swift; sourceTree = "<group>"; };
 		B10000000000000000000055 /* Strings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Strings.swift; sourceTree = "<group>"; };
+		B10000000000000000000060 /* SyntaxHighlightingTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlightingTextView.swift; sourceTree = "<group>"; };
 
 /* End PBXFileReference section */
 
@@ -183,6 +185,7 @@
 				B1000000000000000000000A /* DateHeaderView.swift */,
 				B1000000000000000000000B /* DayTextEditor.swift */,
 				B1000000000000000000000C /* StyledTextView.swift */,
+				B10000000000000000000060 /* SyntaxHighlightingTextView.swift */,
 
 				B10000000000000000000024 /* SyntaxHelpView.swift */,
 
@@ -326,6 +329,7 @@
 				A10000000000000000000053 /* TemplatePickerView.swift in Sources */,
 				A10000000000000000000054 /* WeekSummaryView.swift in Sources */,
 				A10000000000000000000055 /* Strings.swift in Sources */,
+				A10000000000000000000060 /* SyntaxHighlightingTextView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -470,6 +474,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.textcal.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -496,6 +501,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.textcal.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
