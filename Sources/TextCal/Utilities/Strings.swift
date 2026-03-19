@@ -14,6 +14,8 @@ enum Strings {
     static let searchDescription = LocalizedStringKey("Find events and notes across all days")
     static let searchNavTitle = LocalizedStringKey("Search")
 
+    static let fromOtherApps = LocalizedStringKey("From Other Apps")
+
     // MARK: - Editor
     static let editorPlaceholder = LocalizedStringKey("Type events like 9:00 AM - Meeting, or just write...")
 
@@ -23,6 +25,7 @@ enum Strings {
     static let today = LocalizedStringKey("Today")
     static let settings = LocalizedStringKey("Settings")
     static let dismiss = LocalizedStringKey("Dismiss")
+    static let retry = LocalizedStringKey("Retry")
 
     // MARK: - Calendar Picker
     static let defaultCalendar = LocalizedStringKey("Default Calendar")
@@ -35,6 +38,30 @@ enum Strings {
     static let searchButton = LocalizedStringKey("Search")
     static let calendarsButton = LocalizedStringKey("Calendars")
     static let helpButton = LocalizedStringKey("Help")
+
+    // MARK: - Calendar Visibility
+    static let calendarVisibility = LocalizedStringKey("Visibility")
+    static let calendarVisibilityFooter = LocalizedStringKey("Hidden calendars won't appear in your daily view.")
+
+    // MARK: - Unmatched Events
+    static let eventsFromOtherCalendars = LocalizedStringKey("From other calendars")
+
+    // MARK: - Move Event
+    static let moveToTomorrow = LocalizedStringKey("Move to Tomorrow")
+    static let moveToDate = LocalizedStringKey("Move to Date...")
+
+    // MARK: - Week View
+    static let weekView = LocalizedStringKey("Week")
+
+    // MARK: - Templates
+    static let templates = LocalizedStringKey("Templates")
+    static let noTemplates = LocalizedStringKey("No Templates")
+    static let noTemplatesDescription = LocalizedStringKey("Save frequently used events as templates for quick insertion.")
+    static let templateName = LocalizedStringKey("Name")
+    static let templateContent = LocalizedStringKey("Content")
+    static let templateContentFooter = LocalizedStringKey("Use event syntax like \"9:00 AM - Meeting\" or plain text.")
+    static let newTemplate = LocalizedStringKey("New Template")
+    static let editTemplate = LocalizedStringKey("Edit Template")
 
     // MARK: - Permission Banner
     static let calendarAccessDenied = LocalizedStringKey("Calendar access denied. Events won't sync.")

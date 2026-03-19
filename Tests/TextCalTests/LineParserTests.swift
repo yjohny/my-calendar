@@ -6,7 +6,7 @@ struct LineParserTests {
     @Test("Parses simple AM time event")
     func simpleAMEvent() {
         let result = LineParser.parse("9:00 AM - Team standup")
-        guard case .event(let time, _, let title, _, _) = result else {
+        guard case .event(let time, _, let title, _, _, _) = result else {
             Issue.record("Expected event, got \(result)")
             return
         }
@@ -18,7 +18,7 @@ struct LineParserTests {
     @Test("Parses PM time event")
     func pmEvent() {
         let result = LineParser.parse("2:00 PM - Call with client")
-        guard case .event(let time, _, let title, _, _) = result else {
+        guard case .event(let time, _, let title, _, _, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -30,7 +30,7 @@ struct LineParserTests {
     @Test("Parses 24-hour time event")
     func twentyFourHourEvent() {
         let result = LineParser.parse("14:30 - Meeting")
-        guard case .event(let time, _, let title, _, _) = result else {
+        guard case .event(let time, _, let title, _, _, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -42,7 +42,7 @@ struct LineParserTests {
     @Test("Parses time without minutes")
     func timeWithoutMinutes() {
         let result = LineParser.parse("2 PM - Lunch")
-        guard case .event(let time, _, let title, _, _) = result else {
+        guard case .event(let time, _, let title, _, _, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -54,7 +54,7 @@ struct LineParserTests {
     @Test("Parses lowercase am/pm")
     func lowercaseAmPm() {
         let result = LineParser.parse("10:30 am - Brunch")
-        guard case .event(let time, _, let title, _, _) = result else {
+        guard case .event(let time, _, let title, _, _, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -66,7 +66,7 @@ struct LineParserTests {
     @Test("Parses 12 PM correctly")
     func twelvePM() {
         let result = LineParser.parse("12:00 PM - Noon meeting")
-        guard case .event(let time, _, _, _, _) = result else {
+        guard case .event(let time, _, _, _, _, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -76,7 +76,7 @@ struct LineParserTests {
     @Test("Parses 12 AM correctly")
     func twelveAM() {
         let result = LineParser.parse("12:00 AM - Midnight snack")
-        guard case .event(let time, _, _, _, _) = result else {
+        guard case .event(let time, _, _, _, _, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -140,7 +140,7 @@ Had coffee.
     @Test("Parses event with calendar prefix")
     func eventWithCalendarPrefix() {
         let result = LineParser.parse("[Work] 9:00 AM - Team standup")
-        guard case .event(let time, _, let title, _, let calendarName) = result else {
+        guard case .event(let time, _, let title, _, let calendarName, _) = result else {
             Issue.record("Expected event, got \(result)")
             return
         }
@@ -152,7 +152,7 @@ Had coffee.
     @Test("Parses all-day event with calendar prefix")
     func allDayWithCalendarPrefix() {
         let result = LineParser.parse("[Personal] * Birthday party")
-        guard case .allDay(let title, _, let calendarName) = result else {
+        guard case .allDay(let title, _, let calendarName, _) = result else {
             Issue.record("Expected allDay, got \(result)")
             return
         }
@@ -163,7 +163,7 @@ Had coffee.
     @Test("Event without calendar prefix has nil calendarName")
     func eventWithoutCalendarPrefix() {
         let result = LineParser.parse("9:00 AM - Meeting")
-        guard case .event(_, _, _, _, let calendarName) = result else {
+        guard case .event(_, _, _, _, let calendarName, _) = result else {
             Issue.record("Expected event")
             return
         }
@@ -173,7 +173,7 @@ Had coffee.
     @Test("Calendar prefix with spaces in name")
     func calendarPrefixWithSpaces() {
         let result = LineParser.parse("[My Work Calendar] 2:00 PM - Review")
-        guard case .event(_, _, let title, _, let calendarName) = result else {
+        guard case .event(_, _, let title, _, let calendarName, _) = result else {
             Issue.record("Expected event, got \(result)")
             return
         }
@@ -226,7 +226,7 @@ Had coffee.
     @Test("Parses event with calendar suffix")
     func eventWithCalendarSuffix() {
         let result = LineParser.parse("9:00 AM - Team standup [Work]")
-        guard case .event(let time, _, let title, _, let calendarName) = result else {
+        guard case .event(let time, _, let title, _, let calendarName, _) = result else {
             Issue.record("Expected event, got \(result)")
             return
         }
@@ -238,7 +238,7 @@ Had coffee.
     @Test("Parses all-day event with calendar suffix")
     func allDayWithCalendarSuffix() {
         let result = LineParser.parse("* Birthday party [Personal]")
-        guard case .allDay(let title, _, let calendarName) = result else {
+        guard case .allDay(let title, _, let calendarName, _) = result else {
             Issue.record("Expected allDay, got \(result)")
             return
         }
@@ -249,7 +249,7 @@ Had coffee.
     @Test("Parses event with recurrence and calendar suffix")
     func eventWithRecurrenceAndCalendarSuffix() {
         let result = LineParser.parse("9:00 AM - Team standup (weekly) [Work]")
-        guard case .event(let time, _, let title, let recurrence, let calendarName) = result else {
+        guard case .event(let time, _, let title, let recurrence, let calendarName, _) = result else {
             Issue.record("Expected event, got \(result)")
             return
         }

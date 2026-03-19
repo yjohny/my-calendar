@@ -8,6 +8,7 @@ struct CalendarDocumentView: View {
     @State private var showingSearch = false
     @State private var showingDatePicker = false
     @State private var showingCalendarPicker = false
+    @State private var showingWeekView = false
     @State private var writableCalendars: [EKCalendar] = []
     @State private var defaultCalendarId: String?
     @State private var pickerDate = DateFormatting.today
@@ -117,7 +118,7 @@ struct CalendarDocumentView: View {
                     Button {
                         Task {
                             if let ekManager = store.eventKitManager {
-                                writableCalendars = await ekManager.writableCalendars()
+                                writableCalendars = await ekManager.allCalendars()
                             }
                             defaultCalendarId = store.calendarSettings?.defaultCalendarIdentifier
                             showingCalendarPicker = true
@@ -148,19 +149,29 @@ struct CalendarDocumentView: View {
                             Text(message)
                                 .font(.system(.caption, design: .rounded))
                                 .foregroundStyle(.red)
+                            Button {
+                                store.syncStatus = .idle
+                                Task { await store.retryLastSync() }
+                            } label: {
+                                Text(Strings.retry)
+                                    .font(.system(.caption, design: .rounded))
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.blue)
+                            }
+                            .accessibilityLabel("Retry sync")
+                            Button {
+                                store.syncStatus = .idle
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel("Dismiss error")
                         }
                         .transition(.opacity)
-                        .onTapGesture {
-                            store.syncStatus = .idle
-                        }
-                        .task {
-                            try? await Task.sleep(for: .seconds(5))
-                            if case .error = store.syncStatus {
-                                store.syncStatus = .idle
-                            }
-                        }
+                        .accessibilityElement(children: .combine)
                         .accessibilityLabel("Error: \(message)")
-                        .accessibilityHint("Tap to dismiss")
+                        .accessibilityHint("Tap retry to try again, or dismiss")
                     } else if store.syncStatus != .idle {
                         HStack(spacing: 6) {
                             ProgressView()
@@ -172,6 +183,17 @@ struct CalendarDocumentView: View {
                         .transition(.opacity)
                         .accessibilityLabel(store.syncStatus == .saving ? "Saving changes" : "Syncing with calendar")
                     }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingWeekView = true
+                    } label: {
+                        Label("Week", systemImage: "calendar.day.timeline.leading")
+                    }
+                    .accessibilityLabel("Week summary view")
+                    .keyboardShortcut("w", modifiers: .command)
                 }
             }
             .focusable()
@@ -197,10 +219,16 @@ struct CalendarDocumentView: View {
                 viewModel.jumpTo(date: date)
             }
         }
+        .sheet(isPresented: $showingWeekView) {
+            WeekSummaryView(currentDate: currentVisibleDate) { date in
+                viewModel.jumpTo(date: date)
+            }
+        }
         .sheet(isPresented: $showingCalendarPicker) {
             CalendarPickerView(
                 calendars: writableCalendars,
-                selectedIdentifier: $defaultCalendarId
+                selectedIdentifier: $defaultCalendarId,
+                calendarSettings: store.calendarSettings
             )
             .onDisappear {
                 store.calendarSettings?.defaultCalendarIdentifier = defaultCalendarId

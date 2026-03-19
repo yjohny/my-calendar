@@ -36,6 +36,7 @@ final class CalendarStore {
     private var fileStore: FileStore?
     private var coalescer: ChangeCoalescer?
     private(set) var calendarSettings: CalendarSettings?
+    private(set) var templateStore: TemplateStore = TemplateStore()
 
     /// Debounce EventKit sync to avoid re-syncing on every keystroke
     private var syncTask: Task<Void, Never>?
@@ -46,6 +47,9 @@ final class CalendarStore {
 
     /// Cached parsed event keys to avoid re-parsing unchanged text
     private var parsedKeyCache: [Date: (hash: Int, keys: Set<EventColorKey>)] = [:]
+
+    /// Tracks the last date that failed sync for retry
+    private var lastFailedSyncDate: Date?
 
     /// Journal text per date (only freeform text, not events) — used during parsing
     private var journals: [Date: String] = [:]
@@ -165,7 +169,8 @@ final class CalendarStore {
     func refreshEvents(for date: Date) async {
         guard let ekManager = eventKitManager, hasCalendarAccess else { return }
         let key = DateFormatting.normalizeToDay(date)
-        let ekEvents = await ekManager.events(for: key)
+        let hidden = calendarSettings?.hiddenCalendarIdentifiers ?? []
+        let ekEvents = await ekManager.events(for: key, excludingCalendars: hidden)
         let defaultCalId = await resolveDefaultCalendarId()
         processEventsForDate(key, ekEvents: ekEvents, defaultCalId: defaultCalId)
     }
@@ -178,7 +183,8 @@ final class CalendarStore {
         let normalizedStart = DateFormatting.normalizeToDay(start)
         guard let rangeEnd = cal.date(byAdding: .day, value: 1, to: DateFormatting.normalizeToDay(end)) else { return }
 
-        let allEvents = await ekManager.events(from: normalizedStart, to: rangeEnd)
+        let hidden = calendarSettings?.hiddenCalendarIdentifiers ?? []
+        let allEvents = await ekManager.events(from: normalizedStart, to: rangeEnd, excludingCalendars: hidden)
         let defaultCalId = await resolveDefaultCalendarId()
 
         // Group events by day
@@ -231,14 +237,14 @@ final class CalendarStore {
             for line in userLines {
                 let parsed = LineParser.parse(line)
                 switch parsed {
-                case .event(let time, _, let title, _, _):
+                case .event(let time, _, let title, _, _, _):
                     keys.insert(EventColorKey(
                         title: title,
                         hour: time.hour,
                         minute: time.minute,
                         isAllDay: false
                     ))
-                case .allDay(let title, _, _):
+                case .allDay(let title, _, _, _):
                     keys.insert(EventColorKey(
                         title: title,
                         hour: nil,
@@ -314,7 +320,7 @@ final class CalendarStore {
         for line in lines {
             let parsed = LineParser.parse(line)
             switch parsed {
-            case .event(let time, let endTime, let title, let recurrence, let calendarName):
+            case .event(let time, let endTime, let title, let recurrence, let calendarName, let alarmOffset):
                 if let pending = currentEvent {
                     parsedEvents.append(pending)
                 }
@@ -325,10 +331,11 @@ final class CalendarStore {
                     isAllDay: false,
                     recurrence: recurrence,
                     notes: [],
-                    calendarName: calendarName
+                    calendarName: calendarName,
+                    alarmOffset: alarmOffset
                 )
 
-            case .allDay(let title, let recurrence, let calendarName):
+            case .allDay(let title, let recurrence, let calendarName, let alarmOffset):
                 if let pending = currentEvent {
                     parsedEvents.append(pending)
                 }
@@ -339,7 +346,8 @@ final class CalendarStore {
                     isAllDay: true,
                     recurrence: recurrence,
                     notes: [],
-                    calendarName: calendarName
+                    calendarName: calendarName,
+                    alarmOffset: alarmOffset
                 )
 
             case .eventNote(let noteText):
@@ -392,6 +400,7 @@ final class CalendarStore {
                     }
                 } catch {
                     if !Task.isCancelled {
+                        self.lastFailedSyncDate = key
                         syncStatus = .error(Strings.syncFailed)
                     }
                 }
@@ -400,6 +409,38 @@ final class CalendarStore {
             // No EventKit sync needed — go idle after file save is scheduled
             syncStatus = .idle
         }
+    }
+
+    /// Move a line from one day's text to another day.
+    /// Removes the line at `lineIndex` from `sourceDate` and appends it to `targetDate`.
+    func moveEventLine(from sourceDate: Date, lineIndex: Int, to targetDate: Date) {
+        let sourceKey = DateFormatting.normalizeToDay(sourceDate)
+        let targetKey = DateFormatting.normalizeToDay(targetDate)
+
+        guard let sourceText = dayTexts[sourceKey] else { return }
+        var lines = sourceText.components(separatedBy: "\n")
+        guard lineIndex >= 0 && lineIndex < lines.count else { return }
+
+        let movedLine = lines.remove(at: lineIndex)
+        let newSourceText = lines.joined(separator: "\n")
+        update(date: sourceDate, text: newSourceText)
+
+        let targetText = dayTexts[targetKey] ?? ""
+        let newTargetText: String
+        if targetText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            newTargetText = movedLine
+        } else {
+            newTargetText = targetText + "\n" + movedLine
+        }
+        update(date: targetDate, text: newTargetText)
+    }
+
+    /// Retry the last failed sync operation
+    func retryLastSync() async {
+        guard let date = lastFailedSyncDate else { return }
+        let key = DateFormatting.normalizeToDay(date)
+        guard let text = dayTexts[key] else { return }
+        update(date: date, text: text)
     }
 
     /// Force an immediate save (e.g., on app background)
@@ -484,7 +525,8 @@ final class CalendarStore {
             isAllDay: event.isAllDay,
             notes: notes,
             recurrenceRule: ekRule,
-            calendar: calendar
+            calendar: calendar,
+            alarmOffset: event.alarmOffset
         )
     }
 
@@ -577,6 +619,53 @@ final class CalendarStore {
         return results
     }
 
+    /// Search result from EventKit (events not in user's text)
+    struct EventKitSearchResult {
+        let date: Date
+        let matchingLines: [String]
+    }
+
+    /// Search EventKit events across ±1 year for titles matching the query.
+    /// Returns events that are NOT already in dayTexts (i.e., from other apps).
+    func searchEventKitEvents(query: String, maxResults: Int = 50) async -> [EventKitSearchResult] {
+        guard let ekManager = eventKitManager, hasCalendarAccess else { return [] }
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+
+        let cal = Calendar.current
+        let today = DateFormatting.today
+        guard let start = cal.date(byAdding: .year, value: -1, to: today),
+              let end = cal.date(byAdding: .year, value: 1, to: today) else { return [] }
+
+        let defaultCalId = await resolveDefaultCalendarId()
+        let events = await ekManager.searchEvents(query: query, from: start, to: end)
+
+        // Group by day and filter out events already in user's text
+        var resultsByDay: [Date: [String]] = [:]
+        let lowered = query.lowercased()
+
+        for event in events {
+            let dayKey = DateFormatting.normalizeToDay(event.startDate)
+            let userText = dayTexts[dayKey] ?? ""
+
+            // Check if this event title already appears in the user's text for this day
+            if !userText.isEmpty && userText.lowercased().contains((event.title ?? "").lowercased()) {
+                continue
+            }
+
+            let line = EventKitSync.textLine(from: event, defaultCalendarId: defaultCalId)
+            if line.lowercased().contains(lowered) {
+                resultsByDay[dayKey, default: []].append(line)
+            }
+        }
+
+        var results = resultsByDay.map { EventKitSearchResult(date: $0.key, matchingLines: $0.value) }
+        results.sort { $0.date > $1.date }
+        if results.count > maxResults {
+            results = Array(results.prefix(maxResults))
+        }
+        return results
+    }
+
     // MARK: - Persistence
 
     private func scheduleDayTextSave(date: Date, text: String) {
@@ -615,6 +704,53 @@ final class CalendarStore {
     }
 }
 
+/// Represents a time conflict between two events on the same day
+struct TimeConflict: Equatable {
+    let title1: String
+    let title2: String
+    let hour: Int
+    let minute: Int
+}
+
+/// Detects overlapping timed events in a day's text.
+/// Returns the set of event titles that have conflicts.
+func detectConflicts(in text: String) -> Set<String> {
+    let lines = text.components(separatedBy: "\n")
+    var events: [(title: String, startMinutes: Int, endMinutes: Int)] = []
+
+    for line in lines {
+        let parsed = LineParser.parse(line)
+        switch parsed {
+        case .event(let time, let endTime, let title, _, _, _):
+            guard let h = time.hour, let m = time.minute else { continue }
+            let startMin = h * 60 + m
+            let endMin: Int
+            if let endH = endTime?.hour, let endM = endTime?.minute {
+                endMin = endH * 60 + endM
+            } else {
+                endMin = startMin + 60 // default 1 hour
+            }
+            events.append((title, startMin, endMin))
+        default:
+            break
+        }
+    }
+
+    var conflicting = Set<String>()
+    for i in 0..<events.count {
+        for j in (i + 1)..<events.count {
+            let a = events[i]
+            let b = events[j]
+            // Overlap: a starts before b ends AND b starts before a ends
+            if a.startMinutes < b.endMinutes && b.startMinutes < a.endMinutes {
+                conflicting.insert(a.title)
+                conflicting.insert(b.title)
+            }
+        }
+    }
+    return conflicting
+}
+
 /// Key for matching event lines to EventKit calendar colors
 struct EventColorKey: Hashable {
     let title: String
@@ -632,4 +768,5 @@ private struct ParsedEventGroup {
     let recurrence: RecurrenceRule?
     var notes: [String]
     let calendarName: String?
+    let alarmOffset: TimeInterval?
 }

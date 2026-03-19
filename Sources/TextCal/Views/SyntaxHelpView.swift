@@ -43,6 +43,12 @@ struct SyntaxHelpView: View {
                         ("* Anniversary (yearly)", "Once a year"),
                     ])
 
+                    syntaxSection("Reminders", examples: [
+                        ("9:00 AM - Meeting (!15m)", "Alert 15 minutes before"),
+                        ("2:00 PM - Call (!1h)", "Alert 1 hour before"),
+                        ("9:00 AM - Standup (!0m)", "Alert at time of event"),
+                    ])
+
                     repeatBehaviorSection()
                 }
                 .padding(20)

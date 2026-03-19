@@ -15,6 +15,10 @@ struct StyledTextView: View {
     let text: String
     var colorMap: [EventColorKey: Color] = [:]
     var unmatchedEvents: [EventLineInfo] = []
+    var conflictingTitles: Set<String> = []
+    /// Called when the user chooses "Move to..." on an event line.
+    /// Parameters: (lineIndex, targetDate)
+    var onMoveEvent: ((Int, Date) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
     /// Pre-parse lines once per data change, not on every render
@@ -39,18 +43,27 @@ struct StyledTextView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             // Render user's text in document order
-            ForEach(parsedLines, id: \.0) { _, parsed in
-                parsedLineView(parsed)
+            ForEach(parsedLines, id: \.0) { index, parsed in
+                parsedLineView(parsed, lineIndex: index)
             }
             // Append any EventKit events not in user's text
+            if !unmatchedEvents.isEmpty {
+                Text(Strings.eventsFromOtherCalendars)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                    .accessibilityAddTraits(.isHeader)
+            }
             ForEach(Array(unmatchedEvents.enumerated()), id: \.offset) { _, info in
                 styledLine(info.text, overrideColor: info.calendarColor)
+                    .accessibilityLabel("From other calendar: \(info.text)")
             }
         }
     }
 
     @ViewBuilder
-    private func parsedLineView(_ parsed: ParsedLine) -> some View {
+    private func parsedLineView(_ parsed: ParsedLine, lineIndex: Int) -> some View {
         switch parsed {
         case .blank:
             Text(" ")
@@ -59,6 +72,7 @@ struct StyledTextView: View {
         case .allDay(let match, let calName):
             let color = lookupColor(title: match.title, isAllDay: true) ?? Color.orange
             allDayView(match: match, calendarColor: color, calendarName: calName)
+                .modifier(MoveEventContextMenu(lineIndex: lineIndex, onMoveEvent: onMoveEvent))
         case .event(let match, let calName):
             let color = lookupColor(
                 title: match.title,
@@ -66,13 +80,14 @@ struct StyledTextView: View {
                 minute: match.timeComponents.minute
             ) ?? Color.accentColor
             eventView(match: match, calendarColor: color, calendarName: calName)
+                .modifier(MoveEventContextMenu(lineIndex: lineIndex, onMoveEvent: onMoveEvent))
         case .note(let text):
             Text(text)
                 .font(.system(.body, design: .rounded))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .journal(let text):
-            Text(text)
+            markdownText(text)
                 .font(.system(.body, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -141,6 +156,14 @@ struct StyledTextView: View {
         return color
     }
 
+    /// Render text with basic markdown formatting (bold, italic, strikethrough)
+    private func markdownText(_ text: String) -> Text {
+        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            return Text(attributed)
+        }
+        return Text(text)
+    }
+
     /// Strip `[CalendarName]` suffix or prefix from a line for display purposes
     private func stripCalendarPrefix(_ line: String) -> (line: String, calendarName: String?) {
         // Try suffix first (new format)
@@ -175,14 +198,17 @@ struct StyledTextView: View {
             }
             return t
         }()
-        let label = "All day event: \(match.title)" + (calendarName.map { ", calendar \($0)" } ?? "")
+        let isRecurring = match.recurrence != nil
+        let label = "All day event: \(match.title)" + (isRecurring ? ", repeating" : "") + (calendarName.map { ", calendar \($0)" } ?? "")
         result
             .frame(maxWidth: .infinity, alignment: .leading)
+            .opacity(isRecurring ? 0.7 : 1.0)
             .accessibilityLabel(label)
     }
 
     @ViewBuilder
     private func eventView(match: EventLineMatch, calendarColor: Color, calendarName: String? = nil) -> some View {
+        let hasConflict = conflictingTitles.contains(match.title)
         let result: Text = {
             var t = Text(match.timeText)
                 .font(.system(.body, design: .monospaced))
@@ -212,11 +238,74 @@ struct StyledTextView: View {
                     .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(.quaternary)
             }
+            if hasConflict {
+                t = t + Text("  ⚠")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(.orange)
+            }
             return t
         }()
-        let label = "\(match.timeText) \(match.title)" + (calendarName.map { ", calendar \($0)" } ?? "")
+        let isRecurring = match.recurrence != nil
+        let label = "\(match.timeText) \(match.title)" + (isRecurring ? ", repeating" : "") + (hasConflict ? ", overlaps with another event" : "") + (calendarName.map { ", calendar \($0)" } ?? "")
         result
             .frame(maxWidth: .infinity, alignment: .leading)
+            .opacity(isRecurring ? 0.7 : 1.0)
             .accessibilityLabel(label)
+    }
+}
+
+/// Adds a "Move to..." context menu to event lines for text-native event moving.
+/// Long-press an event → pick a date → the line is removed from this day and appended to the target day.
+private struct MoveEventContextMenu: ViewModifier {
+    let lineIndex: Int
+    let onMoveEvent: ((Int, Date) -> Void)?
+    @State private var showingDatePicker = false
+    @State private var targetDate = DateFormatting.today
+
+    func body(content: Content) -> some View {
+        if onMoveEvent != nil {
+            content
+                .contextMenu {
+                    Button {
+                        // Tomorrow
+                        if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: DateFormatting.today) {
+                            onMoveEvent?(lineIndex, tomorrow)
+                        }
+                    } label: {
+                        Label(Strings.moveToTomorrow, systemImage: "arrow.right")
+                    }
+                    Button {
+                        showingDatePicker = true
+                    } label: {
+                        Label(Strings.moveToDate, systemImage: "calendar")
+                    }
+                }
+                .sheet(isPresented: $showingDatePicker) {
+                    NavigationStack {
+                        DatePicker(
+                            Strings.moveToDate,
+                            selection: $targetDate,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.graphical)
+                        .padding()
+                        .navigationTitle(Strings.moveToDate)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(Strings.cancel) { showingDatePicker = false }
+                            }
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button(Strings.done) {
+                                    onMoveEvent?(lineIndex, targetDate)
+                                    showingDatePicker = false
+                                }
+                            }
+                        }
+                    }
+                }
+        } else {
+            content
+        }
     }
 }

@@ -4,9 +4,9 @@ import Foundation
 /// Derived from raw text — never persisted directly.
 enum EntryLine: Equatable {
     /// A line with a recognized time (and optional end time) and event title
-    case event(time: DateComponents, endTime: DateComponents?, title: String, recurrence: RecurrenceRule?, calendarName: String?)
+    case event(time: DateComponents, endTime: DateComponents?, title: String, recurrence: RecurrenceRule?, calendarName: String?, alarmOffset: TimeInterval? = nil)
     /// An all-day event (lines starting with "* ")
-    case allDay(title: String, recurrence: RecurrenceRule?, calendarName: String?)
+    case allDay(title: String, recurrence: RecurrenceRule?, calendarName: String?, alarmOffset: TimeInterval? = nil)
     /// A continuation/note line (indented, follows an event)
     case eventNote(text: String)
     /// Freeform journal text
