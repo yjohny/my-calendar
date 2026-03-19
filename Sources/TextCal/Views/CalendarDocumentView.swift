@@ -85,6 +85,12 @@ struct CalendarDocumentView: View {
                         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
                             Task { await store.forceSave() }
                         }
+                        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                            Task { await store.forceSave() }
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+                            Task { await store.forceSave() }
+                        }
                     }
 
                     // Date scrubber on right edge

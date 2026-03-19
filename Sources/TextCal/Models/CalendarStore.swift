@@ -443,8 +443,20 @@ final class CalendarStore {
         update(date: date, text: text)
     }
 
-    /// Force an immediate save (e.g., on app background)
+    /// Force an immediate save of all pending changes (e.g., on app background or termination).
+    /// Flushes the debounce coalescer to ensure queued saves execute immediately,
+    /// cancels any in-flight EventKit sync task, and writes all cached day texts to disk.
     func forceSave() async {
+        // Cancel any debounced EventKit sync — it's not safe during shutdown
+        syncTask?.cancel()
+        syncTask = nil
+
+        // Flush the coalescer so any debounced file saves execute immediately
+        if let coalescer {
+            await coalescer.flush()
+        }
+
+        // Belt-and-suspenders: write all in-memory day texts to disk
         guard let fileStore else { return }
         for (date, text) in dayTexts {
             do {
