@@ -2,118 +2,120 @@ import SwiftUI
 
 struct DayTextEditor: View {
     let date: Date
+    var eventsOnly: Bool = false
     @Environment(CalendarStore.self) private var store
     @State private var text: String = ""
-    @State private var isEditing = false
     @State private var colorMap: [EventColorKey: Color] = [:]
     @State private var unmatchedEvents: [EventLineInfo] = []
     @State private var refreshTask: Task<Void, Never>?
     @State private var showingTemplates = false
     @State private var autocompleteSuggestions: [AutocompleteSuggestion] = []
     @State private var calendarNames: [String] = []
-    /// Tracks whether the user has made edits this session (prevents refreshState from clobbering undo stack)
-    @State private var hasEditedThisSession = false
-    @FocusState private var editorFocused: Bool
+    @State private var hasLoaded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Autocomplete suggestions bar
+            AutocompleteSuggestionsView(suggestions: autocompleteSuggestions) { suggestion in
+                applySuggestion(suggestion)
+            }
+
+            SyntaxHighlightingTextView(
+                text: $text,
+                colorMap: colorMap,
+                unmatchedEvents: unmatchedEvents,
+                conflictingTitles: detectConflicts(in: text),
+                eventsOnly: eventsOnly,
+                placeholder: "Type events like 9:00 AM - Meeting, or just write...",
+                onTextChange: { newValue in
+                    store.update(date: date, text: newValue)
+                    updateAutocompleteSuggestions()
+                }
+            )
+            .frame(minHeight: hasContent ? 44 : 44)
+            .accessibilityLabel(hasContent
+                ? "Events and notes for \(DateFormatting.headerString(for: date))"
+                : "No events for \(DateFormatting.headerString(for: date))")
+            .accessibilityHint("Edit events or notes")
+
+            // Unmatched EventKit events (from other apps)
+            if !unmatchedEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(Strings.eventsFromOtherCalendars)
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                        .accessibilityAddTraits(.isHeader)
+
+                    ForEach(Array(unmatchedEvents.enumerated()), id: \.offset) { _, info in
+                        unmatchedEventLine(info)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Button {
+                    showingTemplates = true
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                }
+                .accessibilityLabel("Insert template")
+                Spacer()
+                Button {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                } label: {
+                    Text(Strings.done)
+                }
+                .fontWeight(.medium)
+            }
+        }
+        .sheet(isPresented: $showingTemplates) {
+            TemplatePickerView(
+                templateStore: store.templateStore,
+                onInsert: { templateText in
+                    insertTemplate(templateText)
+                }
+            )
+        }
+        .onAppear {
+            refreshState()
+            loadCalendarNames()
+        }
+    }
 
     private var hasContent: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !unmatchedEvents.isEmpty
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if isEditing {
-                // Autocomplete suggestions bar
-                AutocompleteSuggestionsView(suggestions: autocompleteSuggestions) { suggestion in
-                    applySuggestion(suggestion)
-                }
-
-                TextEditor(text: $text)
-                    .font(.system(.body, design: .rounded))
-                    .scrollDisabled(true)
-                    .frame(minHeight: 60)
-                    .padding(.horizontal, 12)
-                    .focused($editorFocused)
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            Button {
-                                showingTemplates = true
-                            } label: {
-                                Image(systemName: "doc.on.clipboard")
-                            }
-                            .accessibilityLabel("Insert template")
-                            Spacer()
-                            Button {
-                                editorFocused = false
-                            } label: {
-                                Text(Strings.done)
-                            }
-                            .fontWeight(.medium)
-                        }
-                    }
-                    .onChange(of: text) { _, newValue in
-                        hasEditedThisSession = true
-                        store.update(date: date, text: newValue)
-                        updateAutocompleteSuggestions()
-                    }
-                    .onChange(of: editorFocused) { _, focused in
-                        if !focused {
-                            isEditing = false
-                            autocompleteSuggestions = []
-                            refreshStatePreservingEdits()
-                        }
-                    }
-                    .onAppear {
-                        // Show the full interleaved text for editing
-                        text = store.displayText(for: date)
-                        hasEditedThisSession = false
-                        editorFocused = true
-                        loadCalendarNames()
-                    }
-                    .sheet(isPresented: $showingTemplates) {
-                        TemplatePickerView(
-                            templateStore: store.templateStore,
-                            onInsert: { templateText in
-                                insertTemplate(templateText)
-                            }
-                        )
-                    }
-            } else if !hasContent {
-                Text(Strings.editorPlaceholder)
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        isEditing = true
-                    }
-                    .accessibilityLabel("No events for \(DateFormatting.headerString(for: date))")
-                    .accessibilityHint("Double tap to add events or notes")
-            } else {
-                StyledTextView(
-                    text: text,
-                    colorMap: colorMap,
-                    unmatchedEvents: unmatchedEvents,
-                    conflictingTitles: detectConflicts(in: text),
-                    onMoveEvent: { lineIndex, targetDate in
-                        store.moveEventLine(from: date, lineIndex: lineIndex, to: targetDate)
-                        refreshState()
-                    }
-                )
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isEditing = true
-                }
-                .accessibilityLabel("Events and notes for \(DateFormatting.headerString(for: date))")
-                .accessibilityHint("Double tap to edit")
-            }
-        }
-        .onAppear {
-            refreshState()
+    @ViewBuilder
+    private func unmatchedEventLine(_ info: EventLineInfo) -> some View {
+        let calColor = info.calendarColor
+        if let match = LineParser.parseEventLine(info.text) {
+            (Text(match.timeText)
+                .font(.system(.body, design: .monospaced))
+                .fontWeight(.medium)
+                .foregroundStyle(calColor)
+            + Text(match.separator + match.title)
+                .font(.system(.body, design: .rounded)))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("From other calendar: \(info.text)")
+        } else if let match = LineParser.parseAllDayLine(info.text) {
+            (Text("★ ")
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(calColor)
+            + Text(match.title)
+                .font(.system(.body, design: .rounded))
+                .fontWeight(.medium))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("From other calendar: \(info.text)")
+        } else {
+            Text(info.text)
+                .font(.system(.body, design: .rounded))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("From other calendar: \(info.text)")
         }
     }
 
@@ -166,27 +168,6 @@ struct DayTextEditor: View {
         autocompleteSuggestions = []
     }
 
-    /// Refresh state after dismissing the editor — preserves the user's edited text
-    /// instead of overwriting it, which would clear the undo stack.
-    private func refreshStatePreservingEdits() {
-        // Don't overwrite text — keep the user's current edits as the source of truth.
-        // Only refresh the color map and unmatched events from EventKit.
-        colorMap = store.colorMap(for: date)
-        unmatchedEvents = store.unmatchedEvents(for: date)
-
-        // Async refresh EventKit data for updated colors
-        refreshTask?.cancel()
-        let refreshDate = date
-        refreshTask = Task {
-            await store.refreshEvents(for: refreshDate)
-            guard !Task.isCancelled else { return }
-            colorMap = store.colorMap(for: refreshDate)
-            unmatchedEvents = store.unmatchedEvents(for: refreshDate)
-        }
-        hasEditedThisSession = false
-    }
-
-    /// Full state refresh (used on initial appear, not after editing)
     private func refreshState() {
         let key = DateFormatting.normalizeToDay(date)
         text = store.dayTexts[key] ?? ""
@@ -204,6 +185,7 @@ struct DayTextEditor: View {
             }
             colorMap = store.colorMap(for: refreshDate)
             unmatchedEvents = store.unmatchedEvents(for: refreshDate)
+            hasLoaded = true
         }
     }
 }

@@ -152,11 +152,9 @@ struct WeekSummaryView: View {
                 }
             case .allDay(let title, _, _, _):
                 result.append("★ \(title)")
-            case .journal(let text):
-                let trimmed = text.trimmingCharacters(in: .whitespaces)
-                if !trimmed.isEmpty {
-                    result.append(trimmed)
-                }
+            case .journal:
+                // Skip journal text — week view shows events only
+                break
             default:
                 break
             }

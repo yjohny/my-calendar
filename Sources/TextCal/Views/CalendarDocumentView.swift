@@ -9,6 +9,7 @@ struct CalendarDocumentView: View {
     @State private var showingDatePicker = false
     @State private var showingCalendarPicker = false
     @State private var showingWeekView = false
+    @State private var eventsOnly = false
     @State private var writableCalendars: [EKCalendar] = []
     @State private var defaultCalendarId: String?
     @State private var pickerDate = DateFormatting.today
@@ -54,7 +55,7 @@ struct CalendarDocumentView: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(viewModel.dates, id: \.self) { date in
-                                    DaySectionView(date: date) {
+                                    DaySectionView(date: date, eventsOnly: eventsOnly) {
                                         pickerDate = date
                                         showingDatePicker = true
                                     }
@@ -112,6 +113,20 @@ struct CalendarDocumentView: View {
                         Label("Search", systemImage: "magnifyingglass")
                     }
                     .keyboardShortcut("f", modifiers: .command)
+
+                    Spacer()
+
+                    Button {
+                        eventsOnly.toggle()
+                    } label: {
+                        Label(
+                            Strings.eventsOnlyLabel,
+                            systemImage: eventsOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
+                        )
+                    }
+                    .accessibilityLabel(eventsOnly ? Strings.showAllContent : Strings.eventsOnlyLabel)
+                    .accessibilityHint("Toggle between showing all content or events only")
+                    .keyboardShortcut("e", modifiers: .command)
 
                     Spacer()
 

@@ -2,13 +2,14 @@ import SwiftUI
 
 struct DaySectionView: View {
     let date: Date
+    var eventsOnly: Bool = false
     var onHeaderTap: (() -> Void)?
     @Environment(CalendarStore.self) private var store
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             DateHeaderView(date: date, onTap: onHeaderTap)
-            DayTextEditor(date: date)
+            DayTextEditor(date: date, eventsOnly: eventsOnly)
             Divider()
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
