@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct TextCalApp: App {
     @State private var store = CalendarStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -20,6 +21,11 @@ struct TextCalApp: App {
                     )
                     await store.load()
                 }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                Task { await store.forceSave() }
+            }
         }
     }
 }

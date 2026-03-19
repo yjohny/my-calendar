@@ -2,6 +2,7 @@ import Foundation
 
 actor ChangeCoalescer {
     private var pendingTasks: [Date: Task<Void, Never>] = [:]
+    private var pendingSaves: [Date: @Sendable () async throws -> Void] = [:]
     private let delay: Duration = .milliseconds(500)
     private var onError: (@Sendable (Error) -> Void)?
 
@@ -11,24 +12,39 @@ actor ChangeCoalescer {
 
     func enqueue(for date: Date, save: @escaping @Sendable () async throws -> Void) {
         pendingTasks[date]?.cancel()
-        pendingTasks[date] = Task {
-            try? await Task.sleep(for: delay)
+        pendingSaves[date] = save
+        pendingTasks[date] = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
+            guard let self else { return }
+            await self.clearPendingSave(for: date)
             do {
                 try await save()
             } catch {
-                onError?(error)
+                await self.reportError(error)
             }
         }
     }
 
-    /// Force any pending save to execute immediately
-    func flush(save: @escaping @Sendable () async throws -> Void) {
+    private func clearPendingSave(for date: Date) {
+        pendingSaves.removeValue(forKey: date)
+    }
+
+    private func reportError(_ error: Error) {
+        onError?(error)
+    }
+
+    /// Force all pending saves to execute immediately, bypassing debounce delays.
+    /// Collects the save closures from pending tasks, cancels the debounced tasks,
+    /// and runs each save directly.
+    func flush() async {
+        let pending = pendingSaves
+        pendingSaves.removeAll()
         for (date, task) in pendingTasks {
             task.cancel()
             pendingTasks.removeValue(forKey: date)
         }
-        pendingTasks[Date.distantPast] = Task {
+        for (_, save) in pending {
             do {
                 try await save()
             } catch {
