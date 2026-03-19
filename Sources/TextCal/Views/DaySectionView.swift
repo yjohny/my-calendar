@@ -10,9 +10,6 @@ struct DaySectionView: View {
         VStack(alignment: .leading, spacing: 0) {
             DateHeaderView(date: date, onTap: onHeaderTap)
             DayTextEditor(date: date, eventsOnly: eventsOnly)
-            Divider()
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
         }
         .onAppear {
             prefetchNearbyDates()
