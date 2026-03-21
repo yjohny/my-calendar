@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Adjusts colors for readability against light/dark backgrounds.
 /// Brightens dark colors in dark mode, darkens light colors in light mode.
