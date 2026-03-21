@@ -9,6 +9,12 @@ struct DateHeaderView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            // Subtle hairline separator between days
+            Divider()
+                .opacity(0.15)
+                .padding(.horizontal, 20)
+
         HStack(spacing: 0) {
             Text(DateFormatting.headerString(for: date))
                 .font(.system(.subheadline, design: .rounded))
@@ -44,5 +50,6 @@ struct DateHeaderView: View {
         .accessibilityLabel(DateFormatting.headerString(for: date) + (isToday ? ", Today" : ""))
         .accessibilityAddTraits(onTap != nil ? .isButton : [])
         .accessibilityHint(onTap != nil ? "Opens date picker" : "")
+        } // VStack
     }
 }
