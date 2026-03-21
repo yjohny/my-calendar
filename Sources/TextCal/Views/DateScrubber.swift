@@ -13,6 +13,7 @@ struct DateScrubber: View {
     @State private var currentLabel = ""
     @State private var lastMonth = -1  // track month for haptic feedback
     @State private var cachedMonthProgresses: [CGFloat] = []
+    @State private var hapticGenerator: UIImpactFeedbackGenerator?
 
     private let calendar = Calendar.current
     private let trackWidth: CGFloat = 32
@@ -93,6 +94,12 @@ struct DateScrubber: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
+                                if !isDragging {
+                                    // Prepare haptic engine on drag start for lower latency
+                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                    generator.prepare()
+                                    hapticGenerator = generator
+                                }
                                 isDragging = true
                                 let usableHeight = geo.size.height - 80
                                 let yOffset = value.location.y - 40
@@ -102,6 +109,7 @@ struct DateScrubber: View {
                             .onEnded { _ in
                                 onDateSelected(dateAtProgress)
                                 lastMonth = -1
+                                hapticGenerator = nil
                                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) {
                                     isDragging = false
                                 }
@@ -134,8 +142,8 @@ struct DateScrubber: View {
         // Haptic feedback when crossing month boundaries
         let month = calendar.component(.month, from: date)
         if lastMonth != -1 && month != lastMonth {
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
+            hapticGenerator?.impactOccurred()
+            hapticGenerator?.prepare()
         }
         lastMonth = month
     }

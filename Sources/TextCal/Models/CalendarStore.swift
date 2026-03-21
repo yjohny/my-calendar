@@ -89,8 +89,10 @@ final class CalendarStore {
                     dayTexts[date] = text
                     journals[date] = text
                 }
+            } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+                // Fresh start — no journal directory yet, this is expected
             } catch {
-                // Fresh start
+                syncStatus = .error("Failed to load data")
             }
 
             // Migrate from legacy single-file format if needed
@@ -211,23 +213,36 @@ final class CalendarStore {
         }
     }
 
+    /// Pre-computed event info to avoid redundant dateComponents calls
+    private struct ProcessedEKEvent {
+        let event: EKEvent
+        let colorKey: EventColorKey
+        let color: Color
+    }
+
     /// Shared logic: process EventKit events for a single date, building color map + unmatched list.
+    /// Computes dateComponents once per event and reuses for both color map and unmatched detection.
     private func processEventsForDate(_ key: Date, ekEvents: [EKEvent], defaultCalId: String?) {
         let cal = Calendar.current
-        var colorMap: [EventColorKey: Color] = [:]
 
-        for event in ekEvents {
-            let color = EventKitSync.calendarColor(from: event)
+        // Pre-compute keys and colors once per event
+        let processed: [ProcessedEKEvent] = ekEvents.map { event in
             let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
             let colorKey = EventColorKey(
                 title: event.title ?? "",
-                hour: comps.hour,
-                minute: comps.minute,
+                hour: event.isAllDay ? nil : comps.hour,
+                minute: event.isAllDay ? nil : comps.minute,
                 isAllDay: event.isAllDay
             )
-            colorMap[colorKey] = color
+            let color = EventKitSync.calendarColor(from: event)
+            return ProcessedEKEvent(event: event, colorKey: colorKey, color: color)
         }
 
+        // Build color map from pre-computed data
+        var colorMap: [EventColorKey: Color] = [:]
+        for item in processed {
+            colorMap[item.colorKey] = item.color
+        }
         eventColorMap[key] = colorMap
 
         // Find EventKit events not represented in user's text (with caching)
@@ -265,19 +280,12 @@ final class CalendarStore {
             userEventKeys = keys
         }
 
+        // Reuse pre-computed keys for unmatched detection
         var unmatched: [EventLineInfo] = []
-        for event in ekEvents {
-            let comps = cal.dateComponents([.hour, .minute], from: event.startDate)
-            let ek = EventColorKey(
-                title: event.title ?? "",
-                hour: comps.hour,
-                minute: comps.minute,
-                isAllDay: event.isAllDay
-            )
-            if !userEventKeys.contains(ek) {
-                let line = EventKitSync.textLine(from: event, defaultCalendarId: defaultCalId)
-                let color = EventKitSync.calendarColor(from: event)
-                unmatched.append(EventLineInfo(text: line, calendarColor: color))
+        for item in processed {
+            if !userEventKeys.contains(item.colorKey) {
+                let line = EventKitSync.textLine(from: item.event, defaultCalendarId: defaultCalId)
+                unmatched.append(EventLineInfo(text: line, calendarColor: item.color))
             }
         }
 
@@ -286,17 +294,8 @@ final class CalendarStore {
 
     /// Resolve the default calendar identifier: user setting → TextCal fallback
     private func resolveDefaultCalendarId() async -> String? {
-        if let settingsId = calendarSettings?.defaultCalendarIdentifier,
-           let ekManager = eventKitManager,
-           await ekManager.calendarForIdentifier(settingsId) != nil {
-            return settingsId
-        }
-        // Fall back to TextCal calendar
-        if let ekManager = eventKitManager,
-           let textCal = await ekManager.getOrCreateCalendar() {
-            return textCal.calendarIdentifier
-        }
-        return nil
+        guard let ekManager = eventKitManager else { return nil }
+        return await EventSyncCoordinator.resolveDefaultCalendarId(ekManager: ekManager, calendarSettings: calendarSettings)
     }
 
     // MARK: - Writing
@@ -481,133 +480,18 @@ final class CalendarStore {
 
     private func syncEventsToEventKit(date: Date, events: [ParsedEventGroup]) async throws {
         guard let ekManager = eventKitManager else { return }
-
-        // Resolve the default calendar
-        let defaultCal = await resolveDefaultCalendar()
-        let defaultCalId = defaultCal?.calendarIdentifier
-
-        // Separate events: ones going to the default calendar vs. override calendars
-        var defaultCalEvents: [ParsedEventGroup] = []
-        var overrideEvents: [(event: ParsedEventGroup, calendar: EKCalendar)] = []
-
-        for event in events {
-            if let name = event.calendarName,
-               let cal = await ekManager.calendarByTitle(name),
-               cal.calendarIdentifier != defaultCalId {
-                // Explicit [CalendarName] override to a non-default calendar
-                overrideEvents.append((event, cal))
-            } else {
-                // No prefix, or prefix matches the default → goes to default
-                defaultCalEvents.append(event)
-            }
-        }
-
-        // --- Default calendar: safe to delete-and-recreate (we own these events) ---
-        if let defaultCal = defaultCal {
-            let calId = defaultCal.calendarIdentifier
-            let existingEvents = await ekManager.managedEvents(for: date, calendarIdentifier: calId)
-            let existingRecurring = existingEvents.filter { $0.hasRecurrenceRules }
-
-            // Remove only non-recurring events in the default calendar
-            try await ekManager.removeManagedEvents(for: date, calendarIdentifier: calId)
-
-            for event in defaultCalEvents {
-                if matchesExistingRecurring(event, existing: existingRecurring, date: date) {
-                    continue
-                }
-                try await saveEventToKit(event, date: date, calendar: defaultCal, ekManager: ekManager)
-            }
-        }
-
-        // --- Override calendars: create-only (never delete events we don't own) ---
-        for (event, cal) in overrideEvents {
-            let existingInCal = await ekManager.managedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
-            if matchesExistingEvent(event, existing: existingInCal, date: date) {
-                continue  // already exists, don't duplicate
-            }
-            try await saveEventToKit(event, date: date, calendar: cal, ekManager: ekManager)
-        }
-    }
-
-    /// Save a single parsed event to EventKit
-    private func saveEventToKit(_ event: ParsedEventGroup, date: Date, calendar: EKCalendar, ekManager: EventKitManager) async throws {
-        let ekRule: EKRecurrenceRule?
-        if let recurrence = event.recurrence {
-            ekRule = EventKitSync.ekRecurrenceRule(from: recurrence)
-        } else {
-            ekRule = nil
-        }
-        let notes = event.notes.isEmpty ? nil : event.notes.joined(separator: "\n")
-        try await ekManager.saveEvent(
-            title: event.title,
+        try await EventSyncCoordinator.syncEvents(
             date: date,
-            startTime: event.startTime,
-            endTime: event.endTime,
-            isAllDay: event.isAllDay,
-            notes: notes,
-            recurrenceRule: ekRule,
-            calendar: calendar,
-            alarmOffset: event.alarmOffset
+            events: events,
+            ekManager: ekManager,
+            calendarSettings: calendarSettings
         )
-    }
-
-    /// Check if a parsed event matches ANY existing event (recurring or not) by title + time
-    private func matchesExistingEvent(_ parsed: ParsedEventGroup, existing: [EKEvent], date: Date) -> Bool {
-        let cal = Calendar.current
-        for ekEvent in existing {
-            guard ekEvent.title == parsed.title else { continue }
-            guard ekEvent.isAllDay == parsed.isAllDay else { continue }
-            if parsed.isAllDay { return true }
-            if let startTime = parsed.startTime {
-                let ekComps = cal.dateComponents([.hour, .minute], from: ekEvent.startDate)
-                guard ekComps.hour == startTime.hour && ekComps.minute == startTime.minute else { continue }
-
-                // Also compare end time so edits to duration are detected
-                if let endTime = parsed.endTime {
-                    let ekEndComps = cal.dateComponents([.hour, .minute], from: ekEvent.endDate)
-                    guard ekEndComps.hour == endTime.hour && ekEndComps.minute == endTime.minute else { continue }
-                }
-                return true
-            }
-        }
-        return false
     }
 
     /// Resolve the user's default calendar (setting → TextCal fallback)
     private func resolveDefaultCalendar() async -> EKCalendar? {
         guard let ekManager = eventKitManager else { return nil }
-        if let settingsId = calendarSettings?.defaultCalendarIdentifier,
-           let cal = await ekManager.calendarForIdentifier(settingsId) {
-            return cal
-        }
-        return await ekManager.getOrCreateCalendar()
-    }
-
-    /// Check if a parsed event matches an existing recurring event occurrence
-    private func matchesExistingRecurring(_ parsed: ParsedEventGroup, existing: [EKEvent], date: Date) -> Bool {
-        let cal = Calendar.current
-        for ekEvent in existing {
-            guard ekEvent.title == parsed.title else { continue }
-            guard ekEvent.isAllDay == parsed.isAllDay else { continue }
-
-            if parsed.isAllDay {
-                return true
-            }
-
-            // Compare start times and end times
-            if let startTime = parsed.startTime {
-                let ekComps = cal.dateComponents([.hour, .minute], from: ekEvent.startDate)
-                guard ekComps.hour == startTime.hour && ekComps.minute == startTime.minute else { continue }
-
-                // Also compare end time to distinguish events at the same start time
-                if let endTime = parsed.endTime {
-                    let ekEndComps = cal.dateComponents([.hour, .minute], from: ekEvent.endDate)
-                    guard ekEndComps.hour == endTime.hour && ekEndComps.minute == endTime.minute else { continue }
-                }
-                return true
-            }
-        }
-        return false
+        return await EventSyncCoordinator.resolveDefaultCalendar(ekManager: ekManager, calendarSettings: calendarSettings)
     }
 
     // MARK: - Search
@@ -619,25 +503,9 @@ final class CalendarStore {
     }
 
     /// Search all day texts for lines containing the query (case-insensitive).
-    /// Returns up to `maxResults` results sorted by date descending (most recent first).
+    /// Delegates to CalendarSearchService. Searches most-recent dates first.
     func searchDayTexts(query: String, maxResults: Int = 50) -> [SearchResult] {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-        let lowered = query.lowercased()
-        var results: [SearchResult] = []
-
-        for (date, text) in dayTexts {
-            let lines = text.components(separatedBy: "\n")
-            let matching = lines.filter { $0.lowercased().contains(lowered) }
-            if !matching.isEmpty {
-                results.append(SearchResult(date: date, matchingLines: matching))
-            }
-        }
-
-        results.sort { $0.date > $1.date }
-        if results.count > maxResults {
-            results = Array(results.prefix(maxResults))
-        }
-        return results
+        CalendarSearchService.searchDayTexts(query: query, dayTexts: dayTexts, maxResults: maxResults)
     }
 
     /// Search result from EventKit (events not in user's text)
@@ -647,44 +515,17 @@ final class CalendarStore {
     }
 
     /// Search EventKit events across ±1 year for titles matching the query.
-    /// Returns events that are NOT already in dayTexts (i.e., from other apps).
+    /// Delegates to CalendarSearchService. Uses parsed event keys for deduplication.
     func searchEventKitEvents(query: String, maxResults: Int = 50) async -> [EventKitSearchResult] {
         guard let ekManager = eventKitManager, hasCalendarAccess else { return [] }
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-
-        let cal = Calendar.current
-        let today = DateFormatting.today
-        guard let start = cal.date(byAdding: .year, value: -1, to: today),
-              let end = cal.date(byAdding: .year, value: 1, to: today) else { return [] }
-
         let defaultCalId = await resolveDefaultCalendarId()
-        let events = await ekManager.searchEvents(query: query, from: start, to: end)
-
-        // Group by day and filter out events already in user's text
-        var resultsByDay: [Date: [String]] = [:]
-        let lowered = query.lowercased()
-
-        for event in events {
-            let dayKey = DateFormatting.normalizeToDay(event.startDate)
-            let userText = dayTexts[dayKey] ?? ""
-
-            // Check if this event title already appears in the user's text for this day
-            if !userText.isEmpty && userText.lowercased().contains((event.title ?? "").lowercased()) {
-                continue
-            }
-
-            let line = EventKitSync.textLine(from: event, defaultCalendarId: defaultCalId)
-            if line.lowercased().contains(lowered) {
-                resultsByDay[dayKey, default: []].append(line)
-            }
-        }
-
-        var results = resultsByDay.map { EventKitSearchResult(date: $0.key, matchingLines: $0.value) }
-        results.sort { $0.date > $1.date }
-        if results.count > maxResults {
-            results = Array(results.prefix(maxResults))
-        }
-        return results
+        return await CalendarSearchService.searchEventKitEvents(
+            query: query,
+            dayTexts: dayTexts,
+            ekManager: ekManager,
+            defaultCalId: defaultCalId,
+            maxResults: maxResults
+        )
     }
 
     // MARK: - Persistence
@@ -781,7 +622,7 @@ struct EventColorKey: Hashable {
 }
 
 /// A group of parsed event data ready to write to EventKit
-private struct ParsedEventGroup {
+struct ParsedEventGroup {
     let title: String
     let startTime: DateComponents?
     let endTime: DateComponents?

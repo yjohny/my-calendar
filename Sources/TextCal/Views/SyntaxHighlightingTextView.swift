@@ -249,29 +249,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
     private func lookupUIColor(title: String, hour: Int? = nil, minute: Int? = nil, isAllDay: Bool = false) -> UIColor? {
         let key = EventColorKey(title: title, hour: hour, minute: minute, isAllDay: isAllDay)
         guard let color = colorMap[key] else { return nil }
-        let adjusted = ensureContrastColor(color)
-        return UIColor(adjusted)
-    }
-
-    private func ensureContrastColor(_ color: Color) -> Color {
-        let resolved = color.resolve(in: .init())
-        let r = Double(resolved.red)
-        let g = Double(resolved.green)
-        let b = Double(resolved.blue)
-        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
-
-        if colorScheme == .dark && luminance < 0.3 {
-            let boost = 0.4
-            return Color(
-                red: min(r + boost, 1.0),
-                green: min(g + boost, 1.0),
-                blue: min(b + boost, 1.0)
-            )
-        } else if colorScheme == .light && luminance > 0.85 {
-            let factor = 0.6
-            return Color(red: r * factor, green: g * factor, blue: b * factor)
-        }
-        return color
+        return ColorContrast.adjustedUIColor(color, for: colorScheme)
     }
 
     /// Strip [CalendarName] suffix or prefix for highlighting purposes
