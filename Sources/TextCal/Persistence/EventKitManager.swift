@@ -132,11 +132,21 @@ actor EventKitManager {
                 var endComps = startComps
                 endComps.hour = end.hour
                 endComps.minute = end.minute
-                event.endDate = dayCalendar.date(from: endComps) ?? event.startDate.addingTimeInterval(3600)
+                var endDate = dayCalendar.date(from: endComps) ?? event.startDate.addingTimeInterval(3600)
+                // Handle overnight events (e.g., 11 PM - 1 AM)
+                if endDate <= event.startDate {
+                    endDate = dayCalendar.date(byAdding: .day, value: 1, to: endDate) ?? endDate.addingTimeInterval(86400)
+                }
+                event.endDate = endDate
             } else {
                 // Default 1 hour duration
                 event.endDate = event.startDate.addingTimeInterval(3600)
             }
+        } else {
+            // Fallback: no start time provided for a non-all-day event — treat as all-day
+            event.isAllDay = true
+            event.startDate = dayCalendar.startOfDay(for: date)
+            event.endDate = dayCalendar.date(byAdding: .day, value: 1, to: event.startDate) ?? event.startDate.addingTimeInterval(86400)
         }
 
         if let notes = notes, !notes.isEmpty {

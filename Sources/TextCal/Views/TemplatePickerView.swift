@@ -5,6 +5,7 @@ struct TemplatePickerView: View {
     @State private var templates: [EventTemplate] = []
     @State private var showingEditor = false
     @State private var editingTemplate: EventTemplate?
+    @State private var saveError: String?
     @Environment(\.dismiss) private var dismiss
     let templateStore: TemplateStore
     let onInsert: (String) -> Void
@@ -74,6 +75,27 @@ struct TemplatePickerView: View {
                     .accessibilityLabel("Add template")
                 }
             }
+            .overlay(alignment: .bottom) {
+                if let error = saveError {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(error)
+                            .font(.system(.caption, design: .rounded))
+                        Spacer()
+                        Button {
+                            saveError = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial)
+                }
+            }
             .sheet(isPresented: $showingEditor) {
                 TemplateEditorView(
                     template: editingTemplate,
@@ -90,7 +112,7 @@ struct TemplatePickerView: View {
 
     private func deleteTemplate(_ template: EventTemplate) {
         templates.removeAll { $0.id == template.id }
-        Task { try? await templateStore.save(templates) }
+        persistTemplates()
     }
 
     private func saveTemplate(_ template: EventTemplate) {
@@ -99,7 +121,18 @@ struct TemplatePickerView: View {
         } else {
             templates.append(template)
         }
-        Task { try? await templateStore.save(templates) }
+        persistTemplates()
+    }
+
+    private func persistTemplates() {
+        Task {
+            do {
+                try await templateStore.save(templates)
+                saveError = nil
+            } catch {
+                saveError = "Failed to save templates"
+            }
+        }
     }
 }
 

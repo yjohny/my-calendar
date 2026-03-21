@@ -13,37 +13,38 @@ actor ChangeCoalescer {
     func enqueue(for date: Date, save: @escaping @Sendable () async throws -> Void) {
         pendingTasks[date]?.cancel()
         pendingSaves[date] = save
+        let debounceDelay = delay
         pendingTasks[date] = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(500))
+            try? await Task.sleep(for: debounceDelay)
             guard !Task.isCancelled else { return }
             guard let self else { return }
-            await self.clearPendingSave(for: date)
-            do {
-                try await save()
-            } catch {
-                await self.reportError(error)
-            }
+            await self.executePendingSave(for: date)
         }
     }
 
-    private func clearPendingSave(for date: Date) {
-        pendingSaves.removeValue(forKey: date)
-    }
-
-    private func reportError(_ error: Error) {
-        onError?(error)
+    /// Execute and clear the pending save for a date, if it still exists.
+    private func executePendingSave(for date: Date) async {
+        guard let save = pendingSaves.removeValue(forKey: date) else { return }
+        pendingTasks.removeValue(forKey: date)
+        do {
+            try await save()
+        } catch {
+            onError?(error)
+        }
     }
 
     /// Force all pending saves to execute immediately, bypassing debounce delays.
-    /// Collects the save closures from pending tasks, cancels the debounced tasks,
-    /// and runs each save directly.
+    /// Cancels the debounced tasks first, then runs each save directly.
     func flush() async {
+        // Cancel all debounced tasks so they don't fire after flush
+        for (_, task) in pendingTasks {
+            task.cancel()
+        }
+        pendingTasks.removeAll()
+
+        // Take the pending saves and execute them
         let pending = pendingSaves
         pendingSaves.removeAll()
-        for (date, task) in pendingTasks {
-            task.cancel()
-            pendingTasks.removeValue(forKey: date)
-        }
         for (_, save) in pending {
             do {
                 try await save()

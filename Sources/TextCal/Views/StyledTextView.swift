@@ -11,7 +11,7 @@ private enum ParsedLine {
 
 /// Displays day text with styling: event lines get color accents, journal text is plain.
 /// Lines render in document order (interleaved events + journal).
-struct StyledTextView: View {
+struct StyledTextView: View, Equatable {
     let text: String
     var colorMap: [EventColorKey: Color] = [:]
     var unmatchedEvents: [EventLineInfo] = []
@@ -23,6 +23,17 @@ struct StyledTextView: View {
     /// Parameters: (lineIndex, targetDate)
     var onMoveEvent: ((Int, Date) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
+
+    // Equatable: compare data inputs only, exclude closure
+    static func == (lhs: StyledTextView, rhs: StyledTextView) -> Bool {
+        lhs.text == rhs.text &&
+        lhs.colorMap == rhs.colorMap &&
+        lhs.unmatchedEvents == rhs.unmatchedEvents &&
+        lhs.conflictingTitles == rhs.conflictingTitles &&
+        lhs.eventsOnly == rhs.eventsOnly &&
+        lhs.calendarNames == rhs.calendarNames &&
+        lhs.defaultCalendarName == rhs.defaultCalendarName
+    }
 
     /// Pre-parse lines once per data change, not on every render
     private var parsedLines: [(Int, ParsedLine)] {
@@ -140,32 +151,7 @@ struct StyledTextView: View {
     private func lookupColor(title: String, hour: Int? = nil, minute: Int? = nil, isAllDay: Bool = false) -> Color? {
         let key = EventColorKey(title: title, hour: hour, minute: minute, isAllDay: isAllDay)
         guard let color = colorMap[key] else { return nil }
-        return ensureContrast(color)
-    }
-
-    /// Ensure a color has sufficient contrast against the current background
-    private func ensureContrast(_ color: Color) -> Color {
-        // In dark mode, very dark colors are hard to read; in light mode, very light colors are hard to read
-        let resolved = color.resolve(in: .init())
-        let r = Double(resolved.red)
-        let g = Double(resolved.green)
-        let b = Double(resolved.blue)
-        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
-
-        if colorScheme == .dark && luminance < 0.3 {
-            // Too dark for dark mode — lighten by blending toward white
-            let boost = 0.4
-            return Color(
-                red: min(r + boost, 1.0),
-                green: min(g + boost, 1.0),
-                blue: min(b + boost, 1.0)
-            )
-        } else if colorScheme == .light && luminance > 0.85 {
-            // Too light for light mode — darken by scaling down
-            let factor = 0.6
-            return Color(red: r * factor, green: g * factor, blue: b * factor)
-        }
-        return color
+        return ColorContrast.adjusted(color, for: colorScheme)
     }
 
     /// Check if a calendar name matches the user's default calendar (case-insensitive)

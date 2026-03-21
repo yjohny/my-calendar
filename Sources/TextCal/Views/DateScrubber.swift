@@ -13,6 +13,7 @@ struct DateScrubber: View {
     @State private var currentLabel = ""
     @State private var lastMonth = -1  // track month for haptic feedback
     @State private var cachedMonthProgresses: [CGFloat] = []
+    @State private var hapticGenerator: UIImpactFeedbackGenerator?
 
     private let calendar = Calendar.current
     private let trackWidth: CGFloat = 32
@@ -35,30 +36,33 @@ struct DateScrubber: View {
         HStack {
             Spacer()
             ZStack(alignment: .trailing) {
-                // Floating month/year label (appears during drag)
-                if isDragging {
-                    HStack(spacing: 8) {
-                        Text(currentLabel)
-                            .font(.system(.subheadline, design: .rounded))
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
-                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-
-                        // Arrow pointing to track
-                        Triangle()
-                            .fill(Color.accentColor)
-                            .frame(width: 8, height: 12)
-                    }
-                    .offset(x: -trackWidth - 4)
-                    .position(x: UIScreen.main.bounds.width / 2, y: dragProgress * UIScreen.main.bounds.height * 0.8 + UIScreen.main.bounds.height * 0.1)
-                    .animation(reduceMotion ? nil : .interactiveSpring, value: dragProgress)
-                }
-
                 // Track
                 GeometryReader { geo in
+                    // Floating month/year label (appears during drag)
+                    if isDragging {
+                        HStack(spacing: 8) {
+                            Text(currentLabel)
+                                .font(.system(.subheadline, design: .rounded))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
+                                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+
+                            // Arrow pointing to track
+                            Triangle()
+                                .fill(Color.accentColor)
+                                .frame(width: 8, height: 12)
+                        }
+                        .position(
+                            x: -60,
+                            y: dragProgress * (geo.size.height - 80) + 40
+                        )
+                        .animation(reduceMotion ? nil : .interactiveSpring, value: dragProgress)
+                    }
+
+                    // Track content
                     ZStack(alignment: .top) {
                         // Track background
                         RoundedRectangle(cornerRadius: 2)
@@ -90,6 +94,12 @@ struct DateScrubber: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
+                                if !isDragging {
+                                    // Prepare haptic engine on drag start for lower latency
+                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                    generator.prepare()
+                                    hapticGenerator = generator
+                                }
                                 isDragging = true
                                 let usableHeight = geo.size.height - 80
                                 let yOffset = value.location.y - 40
@@ -99,6 +109,7 @@ struct DateScrubber: View {
                             .onEnded { _ in
                                 onDateSelected(dateAtProgress)
                                 lastMonth = -1
+                                hapticGenerator = nil
                                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) {
                                     isDragging = false
                                 }
@@ -131,8 +142,8 @@ struct DateScrubber: View {
         // Haptic feedback when crossing month boundaries
         let month = calendar.component(.month, from: date)
         if lastMonth != -1 && month != lastMonth {
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
+            hapticGenerator?.impactOccurred()
+            hapticGenerator?.prepare()
         }
         lastMonth = month
     }

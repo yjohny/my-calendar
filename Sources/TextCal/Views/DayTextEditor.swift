@@ -14,6 +14,10 @@ struct DayTextEditor: View {
     @State private var defaultCalendarName: String?
     @State private var hasLoaded = false
     @State private var adoptedUnmatchedKeys: Set<String> = []
+    @State private var conflicts: Set<String> = []
+    /// Tracks whether the user has made local edits since last store sync.
+    /// Prevents async refreshes from overwriting user's in-progress typing.
+    @State private var userHasLocalEdits = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -22,7 +26,7 @@ struct DayTextEditor: View {
                 StyledTextView(
                     text: text,
                     colorMap: colorMap,
-                    conflictingTitles: detectConflicts(in: text),
+                    conflictingTitles: conflicts,
                     eventsOnly: true,
                     calendarNames: calendarNames,
                     defaultCalendarName: defaultCalendarName
@@ -43,13 +47,15 @@ struct DayTextEditor: View {
                     text: $text,
                     colorMap: colorMap,
                     unmatchedEvents: [],
-                    conflictingTitles: detectConflicts(in: text),
+                    conflictingTitles: conflicts,
                     eventsOnly: false,
                     calendarNames: calendarNames,
                     defaultCalendarName: defaultCalendarName,
                     placeholder: "Type events like 9:00 AM - Meeting, or just write...",
                     onTextChange: { newValue in
+                        userHasLocalEdits = true
                         store.update(date: date, text: newValue)
+                        conflicts = detectConflicts(in: newValue)
                         updateAutocompleteSuggestions()
                     }
                 )
@@ -87,7 +93,12 @@ struct DayTextEditor: View {
         }
         .onAppear {
             refreshState()
-            loadCalendarNames()
+        }
+        .onChange(of: date) { _, _ in
+            refreshState()
+        }
+        .task(id: date) {
+            await loadCalendarNames()
         }
     }
 
@@ -104,19 +115,16 @@ struct DayTextEditor: View {
         store.update(date: date, text: text)
     }
 
-    private func loadCalendarNames() {
-        Task {
-            if let ekManager = store.eventKitManager {
-                let calendars = await ekManager.allCalendars()
-                calendarNames = calendars.map(\.title)
-                // Resolve the default calendar name
-                if let defaultId = store.calendarSettings?.defaultCalendarIdentifier,
-                   let defaultCal = await ekManager.calendarForIdentifier(defaultId) {
-                    defaultCalendarName = defaultCal.title
-                } else if let textCal = await ekManager.getOrCreateCalendar() {
-                    defaultCalendarName = textCal.title
-                }
-            }
+    private func loadCalendarNames() async {
+        guard let ekManager = store.eventKitManager else { return }
+        let calendars = await ekManager.allCalendars()
+        guard !Task.isCancelled else { return }
+        calendarNames = calendars.map(\.title)
+        if let defaultId = store.calendarSettings?.defaultCalendarIdentifier,
+           let defaultCal = await ekManager.calendarForIdentifier(defaultId) {
+            defaultCalendarName = defaultCal.title
+        } else if let textCal = await ekManager.getOrCreateCalendar() {
+            defaultCalendarName = textCal.title
         }
     }
 
@@ -153,7 +161,12 @@ struct DayTextEditor: View {
 
     private func refreshState() {
         let key = DateFormatting.normalizeToDay(date)
-        text = store.dayTexts[key] ?? ""
+        // Only overwrite local text if user hasn't made edits
+        if !userHasLocalEdits {
+            text = store.dayTexts[key] ?? ""
+            conflicts = detectConflicts(in: text)
+        }
+        userHasLocalEdits = false
         colorMap = store.colorMap(for: date)
         unmatchedEvents = store.unmatchedEvents(for: date)
         refreshTask?.cancel()
@@ -162,9 +175,13 @@ struct DayTextEditor: View {
             await store.ensureLoaded(for: refreshDate)
             await store.refreshEvents(for: refreshDate)
             guard !Task.isCancelled else { return }
-            let loadedText = store.dayTexts[DateFormatting.normalizeToDay(refreshDate)] ?? ""
-            if text.isEmpty && !loadedText.isEmpty {
-                text = loadedText
+            // Only update text from store if user hasn't typed anything locally
+            if !userHasLocalEdits {
+                let loadedText = store.dayTexts[DateFormatting.normalizeToDay(refreshDate)] ?? ""
+                if text.isEmpty && !loadedText.isEmpty {
+                    text = loadedText
+                    conflicts = detectConflicts(in: text)
+                }
             }
             colorMap = store.colorMap(for: refreshDate)
             unmatchedEvents = store.unmatchedEvents(for: refreshDate)
