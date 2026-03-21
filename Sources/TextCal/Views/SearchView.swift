@@ -159,7 +159,7 @@ struct SearchView: View {
             if searchStart < range.lowerBound {
                 let prefix = String(line[searchStart..<range.lowerBound])
                 result = result + Text(prefix)
-                    .foregroundStyle(isEvent ? Color.primary : Color.primary)
+                    .foregroundStyle(isEvent ? Color.accentColor.opacity(0.7) : Color.primary)
             }
             // Add highlighted match
             let match = String(line[range])

@@ -146,15 +146,15 @@ struct WeekSummaryView: View {
         for line in lines {
             let parsed = LineParser.parse(line)
             switch parsed {
-            case .event(_, _, let title, _, _, _):
-                if let match = LineParser.parseEventLine(line) {
-                    result.append("\(match.timeText) \(title)")
-                }
+            case .event(let time, _, let title, _, _, _):
+                let h = time.hour ?? 0
+                let m = time.minute ?? 0
+                let ampm = h >= 12 ? "PM" : "AM"
+                let h12 = h > 12 ? h - 12 : (h == 0 ? 12 : h)
+                let timeStr = m == 0 ? "\(h12) \(ampm)" : "\(h12):\(String(format: "%02d", m)) \(ampm)"
+                result.append("\(timeStr) \(title)")
             case .allDay(let title, _, _, _):
                 result.append("★ \(title)")
-            case .journal:
-                // Skip journal text — week view shows events only
-                break
             default:
                 break
             }
@@ -162,16 +162,24 @@ struct WeekSummaryView: View {
         return result
     }
 
+    private static let rangeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
+    private static let weekdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE"
+        return f
+    }()
+
     private var weekRangeText: String {
         let end = Calendar.current.date(byAdding: .day, value: 6, to: weekStart)!
-        let fmt = DateFormatter()
-        fmt.dateFormat = "MMM d"
-        return "\(fmt.string(from: weekStart)) – \(fmt.string(from: end))"
+        return "\(Self.rangeFormatter.string(from: weekStart)) – \(Self.rangeFormatter.string(from: end))"
     }
 
     private func dayOfWeekShort(_ date: Date) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "EEE"
-        return fmt.string(from: date).uppercased()
+        Self.weekdayFormatter.string(from: date).uppercased()
     }
 }

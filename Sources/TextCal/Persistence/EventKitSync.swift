@@ -151,6 +151,14 @@ enum EventKitSync {
             )
 
         case .weekly(let weekday):
+            if weekday == 0 {
+                // Sentinel: generic "weekly" — no specific day constraint
+                return EKRecurrenceRule(
+                    recurrenceWith: .weekly,
+                    interval: 1,
+                    end: nil
+                )
+            }
             guard weekday >= 1 && weekday <= 7 else { return nil }
             let ekWeekdays: [EKWeekday] = [.sunday, .monday, .tuesday, .wednesday, .thursday, .friday, .saturday]
             let day = EKRecurrenceDayOfWeek(ekWeekdays[weekday - 1])
@@ -167,6 +175,14 @@ enum EventKitSync {
             )
 
         case .biweekly(let weekday):
+            if weekday == 0 {
+                // Sentinel: generic "biweekly" — no specific day constraint
+                return EKRecurrenceRule(
+                    recurrenceWith: .weekly,
+                    interval: 2,
+                    end: nil
+                )
+            }
             guard weekday >= 1 && weekday <= 7 else { return nil }
             let ekWeekdays: [EKWeekday] = [.sunday, .monday, .tuesday, .wednesday, .thursday, .friday, .saturday]
             let day = EKRecurrenceDayOfWeek(ekWeekdays[weekday - 1])
@@ -183,6 +199,14 @@ enum EventKitSync {
             )
 
         case .monthly(let day):
+            if day == 0 {
+                // Sentinel: generic "monthly" — no specific day constraint
+                return EKRecurrenceRule(
+                    recurrenceWith: .monthly,
+                    interval: 1,
+                    end: nil
+                )
+            }
             guard day >= 1 && day <= 31 else { return nil }
             return EKRecurrenceRule(
                 recurrenceWith: .monthly,

@@ -14,6 +14,7 @@ struct DayTextEditor: View {
     @State private var defaultCalendarName: String?
     @State private var hasLoaded = false
     @State private var adoptedUnmatchedKeys: Set<String> = []
+    @State private var conflicts: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -22,7 +23,7 @@ struct DayTextEditor: View {
                 StyledTextView(
                     text: text,
                     colorMap: colorMap,
-                    conflictingTitles: detectConflicts(in: text),
+                    conflictingTitles: conflicts,
                     eventsOnly: true,
                     calendarNames: calendarNames,
                     defaultCalendarName: defaultCalendarName
@@ -43,13 +44,14 @@ struct DayTextEditor: View {
                     text: $text,
                     colorMap: colorMap,
                     unmatchedEvents: [],
-                    conflictingTitles: detectConflicts(in: text),
+                    conflictingTitles: conflicts,
                     eventsOnly: false,
                     calendarNames: calendarNames,
                     defaultCalendarName: defaultCalendarName,
                     placeholder: "Type events like 9:00 AM - Meeting, or just write...",
                     onTextChange: { newValue in
                         store.update(date: date, text: newValue)
+                        conflicts = detectConflicts(in: newValue)
                         updateAutocompleteSuggestions()
                     }
                 )
@@ -88,6 +90,9 @@ struct DayTextEditor: View {
         .onAppear {
             refreshState()
             loadCalendarNames()
+        }
+        .onChange(of: date) { _, _ in
+            refreshState()
         }
     }
 
@@ -154,6 +159,7 @@ struct DayTextEditor: View {
     private func refreshState() {
         let key = DateFormatting.normalizeToDay(date)
         text = store.dayTexts[key] ?? ""
+        conflicts = detectConflicts(in: text)
         colorMap = store.colorMap(for: date)
         unmatchedEvents = store.unmatchedEvents(for: date)
         refreshTask?.cancel()

@@ -123,6 +123,8 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
 
         for line in lines {
             let lineLength = (line as NSString).length
+            // Guard against going past the storage length
+            guard location + lineLength <= storage.length else { break }
             let lineRange = NSRange(location: location, length: lineLength)
             let (displayLine, calendarName) = stripCalendarSyntax(line)
 

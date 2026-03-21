@@ -46,7 +46,9 @@ actor FileStore {
                 try FileManager.default.removeItem(at: url)
             }
         } else {
-            try text.write(to: url, atomically: true, encoding: .utf8)
+            // Write the original text (preserving user's trailing newlines within content)
+            // but ensure we don't write purely whitespace files
+            try text.trimmingCharacters(in: .newlines).write(to: url, atomically: true, encoding: .utf8)
         }
     }
 

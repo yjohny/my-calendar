@@ -43,6 +43,7 @@ final class CalendarStore {
 
     /// LRU tracking for dayTexts cache eviction
     private var accessOrder: [Date] = []
+    private var accessOrderSet: Set<Date> = []
     private let maxCachedDays = 180
 
     /// Cached parsed event keys to avoid re-parsing unchanged text
@@ -101,7 +102,11 @@ final class CalendarStore {
 
     /// Mark a date as recently accessed and evict old entries if needed
     private func touchDate(_ date: Date) {
-        accessOrder.removeAll { $0 == date }
+        if accessOrderSet.contains(date) {
+            accessOrder.removeAll { $0 == date }
+        } else {
+            accessOrderSet.insert(date)
+        }
         accessOrder.append(date)
         evictIfNeeded()
     }
@@ -110,6 +115,7 @@ final class CalendarStore {
     private func evictIfNeeded() {
         while accessOrder.count > maxCachedDays {
             let evicted = accessOrder.removeFirst()
+            accessOrderSet.remove(evicted)
             dayTexts.removeValue(forKey: evicted)
             eventColorMap.removeValue(forKey: evicted)
             unmatchedEventLines.removeValue(forKey: evicted)
@@ -458,13 +464,16 @@ final class CalendarStore {
 
         // Belt-and-suspenders: write all in-memory day texts to disk
         guard let fileStore else { return }
+        var saveError: Error?
         for (date, text) in dayTexts {
             do {
                 try await fileStore.saveJournal(text, for: date)
             } catch {
-                syncStatus = .error(Strings.saveFailed)
-                return
+                saveError = error
             }
+        }
+        if saveError != nil {
+            syncStatus = .error(Strings.saveFailed)
         }
     }
 

@@ -35,30 +35,33 @@ struct DateScrubber: View {
         HStack {
             Spacer()
             ZStack(alignment: .trailing) {
-                // Floating month/year label (appears during drag)
-                if isDragging {
-                    HStack(spacing: 8) {
-                        Text(currentLabel)
-                            .font(.system(.subheadline, design: .rounded))
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
-                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-
-                        // Arrow pointing to track
-                        Triangle()
-                            .fill(Color.accentColor)
-                            .frame(width: 8, height: 12)
-                    }
-                    .offset(x: -trackWidth - 4)
-                    .position(x: UIScreen.main.bounds.width / 2, y: dragProgress * UIScreen.main.bounds.height * 0.8 + UIScreen.main.bounds.height * 0.1)
-                    .animation(reduceMotion ? nil : .interactiveSpring, value: dragProgress)
-                }
-
                 // Track
                 GeometryReader { geo in
+                    // Floating month/year label (appears during drag)
+                    if isDragging {
+                        HStack(spacing: 8) {
+                            Text(currentLabel)
+                                .font(.system(.subheadline, design: .rounded))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 8))
+                                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+
+                            // Arrow pointing to track
+                            Triangle()
+                                .fill(Color.accentColor)
+                                .frame(width: 8, height: 12)
+                        }
+                        .position(
+                            x: -60,
+                            y: dragProgress * (geo.size.height - 80) + 40
+                        )
+                        .animation(reduceMotion ? nil : .interactiveSpring, value: dragProgress)
+                    }
+
+                    // Track content
                     ZStack(alignment: .top) {
                         // Track background
                         RoundedRectangle(cornerRadius: 2)
