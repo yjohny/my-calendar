@@ -11,6 +11,7 @@ struct DayTextEditor: View {
     @State private var showingTemplates = false
     @State private var autocompleteSuggestions: [AutocompleteSuggestion] = []
     @State private var calendarNames: [String] = []
+    @State private var defaultCalendarName: String?
     @State private var hasLoaded = false
     @State private var adoptedUnmatchedKeys: Set<String> = []
 
@@ -23,7 +24,8 @@ struct DayTextEditor: View {
                     colorMap: colorMap,
                     conflictingTitles: detectConflicts(in: text),
                     eventsOnly: true,
-                    calendarNames: calendarNames
+                    calendarNames: calendarNames,
+                    defaultCalendarName: defaultCalendarName
                 )
                 .padding(.horizontal, 20)
                 .padding(.vertical, 2)
@@ -44,6 +46,7 @@ struct DayTextEditor: View {
                     conflictingTitles: detectConflicts(in: text),
                     eventsOnly: false,
                     calendarNames: calendarNames,
+                    defaultCalendarName: defaultCalendarName,
                     placeholder: "Type events like 9:00 AM - Meeting, or just write...",
                     onTextChange: { newValue in
                         store.update(date: date, text: newValue)
@@ -106,6 +109,13 @@ struct DayTextEditor: View {
             if let ekManager = store.eventKitManager {
                 let calendars = await ekManager.allCalendars()
                 calendarNames = calendars.map(\.title)
+                // Resolve the default calendar name
+                if let defaultId = store.calendarSettings?.defaultCalendarIdentifier,
+                   let defaultCal = await ekManager.calendarForIdentifier(defaultId) {
+                    defaultCalendarName = defaultCal.title
+                } else if let textCal = await ekManager.getOrCreateCalendar() {
+                    defaultCalendarName = textCal.title
+                }
             }
         }
     }

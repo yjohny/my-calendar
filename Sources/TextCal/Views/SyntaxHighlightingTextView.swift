@@ -24,6 +24,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
     var conflictingTitles: Set<String>
     var eventsOnly: Bool
     var calendarNames: [String]
+    var defaultCalendarName: String?
     var placeholder: String
     var onTextChange: ((String) -> Void)?
 
@@ -175,7 +176,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                 if let endTime = match.endTimeText {
                     if let endRange = rangeOf(endTime, in: nsString, within: lineRange) {
                         storage.addAttribute(.font, value: monoFont, range: endRange)
-                        storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.7), range: endRange)
+                        storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.85), range: endRange)
                     }
                     // Style the dash between times
                     let dashSearch = "\(timeText)–\(endTime)"
@@ -185,7 +186,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                         let dashLoc = dashFullRange.location + (timeText as NSString).length
                         let dashRange = NSRange(location: dashLoc, length: 1)
                         if dashRange.location + dashRange.length <= storage.length {
-                            storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.7), range: dashRange)
+                            storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.85), range: dashRange)
                         }
                     }
                 }
@@ -196,7 +197,7 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                     let sepStart = sepFullRange.location + (sepSearch as NSString).length - (match.separator as NSString).length
                     let sepRange = NSRange(location: sepStart, length: (match.separator as NSString).length)
                     if sepRange.location + sepRange.length <= storage.length {
-                        storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.4), range: sepRange)
+                        storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.55), range: sepRange)
                     }
                 }
 
@@ -229,7 +230,8 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
                     storage.addAttribute(.foregroundColor, value: UIColor.clear, range: lineRange)
                 }
             } else {
-                // Journal text
+                // Journal text — slightly dimmer to distinguish from event lines
+                storage.addAttribute(.foregroundColor, value: UIColor.secondaryLabel, range: lineRange)
                 if eventsOnly {
                     storage.addAttribute(.foregroundColor, value: UIColor.clear, range: lineRange)
                 }
@@ -281,14 +283,24 @@ struct SyntaxHighlightingTextView: UIViewRepresentable {
         return (line, nil)
     }
 
-    /// Highlight [CalendarName] bracket syntax in orange if the name doesn't match any known calendar
+    /// Highlight [CalendarName] bracket syntax: hide for default calendar, orange for unknown
     private func highlightUnknownCalendarName(_ calendarName: String?, in line: String, storage: NSTextStorage, nsString: NSString, lineRange: NSRange) {
         guard let calName = calendarName else { return }
+        let bracketText = "[\(calName)]"
+        // Hide brackets for default calendar
+        if let defName = defaultCalendarName,
+           calName.localizedCaseInsensitiveCompare(defName) == .orderedSame {
+            if let nsRange = rangeOf(bracketText, in: nsString, within: lineRange) {
+                storage.addAttribute(.foregroundColor, value: UIColor.tertiaryLabel.withAlphaComponent(0.3), range: nsRange)
+                let captionFont = UIFont.rounded(ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize)
+                storage.addAttribute(.font, value: captionFont, range: nsRange)
+            }
+            return
+        }
         // Check against known calendar names (case-insensitive)
         let matches = calendarNames.contains { $0.localizedCaseInsensitiveCompare(calName) == .orderedSame }
         guard !matches else { return }
         // Find the bracketed text in the original line
-        let bracketText = "[\(calName)]"
         if let nsRange = rangeOf(bracketText, in: nsString, within: lineRange) {
             storage.addAttribute(.foregroundColor, value: UIColor.systemOrange, range: nsRange)
         }

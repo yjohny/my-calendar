@@ -18,6 +18,7 @@ struct StyledTextView: View {
     var conflictingTitles: Set<String> = []
     var eventsOnly: Bool = false
     var calendarNames: [String] = []
+    var defaultCalendarName: String?
     /// Called when the user chooses "Move to..." on an event line.
     /// Parameters: (lineIndex, targetDate)
     var onMoveEvent: ((Int, Date) -> Void)?
@@ -97,6 +98,7 @@ struct StyledTextView: View {
             if !eventsOnly {
                 markdownText(text)
                     .font(.system(.body, design: .rounded))
+                    .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -166,6 +168,12 @@ struct StyledTextView: View {
         return color
     }
 
+    /// Check if a calendar name matches the user's default calendar (case-insensitive)
+    private func isDefaultCalendar(_ name: String) -> Bool {
+        guard let defaultName = defaultCalendarName else { return false }
+        return name.localizedCaseInsensitiveCompare(defaultName) == .orderedSame
+    }
+
     /// Check if a calendar name doesn't match any known calendar (case-insensitive)
     private func isUnknownCalendar(_ name: String) -> Bool {
         guard !calendarNames.isEmpty else { return false }
@@ -221,7 +229,7 @@ struct StyledTextView: View {
                     .font(.system(.caption, design: .rounded))
                     .foregroundStyle(.orange)
             }
-            if let calName = calendarName {
+            if let calName = calendarName, !isDefaultCalendar(calName) {
                 let isUnknown = isUnknownCalendar(calName)
                 t = t + Text("  \(calName)")
                     .font(.system(.caption2, design: .rounded))
@@ -249,11 +257,11 @@ struct StyledTextView: View {
             if let endTime = match.endTimeText {
                 t = t + Text("–")
                     .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(calendarColor.opacity(0.7))
+                    .foregroundStyle(calendarColor.opacity(0.85))
                 + Text(endTime)
                     .font(.system(.body, design: .monospaced))
                     .fontWeight(.medium)
-                    .foregroundStyle(calendarColor.opacity(0.7))
+                    .foregroundStyle(calendarColor.opacity(0.85))
             }
 
             t = t + Text(match.separator + match.title)
@@ -269,7 +277,7 @@ struct StyledTextView: View {
                     .font(.system(.caption, design: .rounded))
                     .foregroundStyle(.orange)
             }
-            if let calName = calendarName {
+            if let calName = calendarName, !isDefaultCalendar(calName) {
                 let isUnknown = isUnknownCalendar(calName)
                 t = t + Text("  \(calName)")
                     .font(.system(.caption2, design: .rounded))
