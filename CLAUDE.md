@@ -17,6 +17,7 @@ Xcode project: `TextCal.xcodeproj`
 - **Persistence/** — `EventKitManager` (actor) wraps EKEventStore CRUD; `saveEvent()` and removal methods throw on failure. `EventKitSync` converts between text lines and `EKEvent` objects; uses a static cached `DateFormatter` for time rendering. `FileStore` (actor) handles per-day text files. `ChangeCoalescer` debounces saves per-date, tracks pending save closures in `pendingSaves`, and reports errors via an `onError` callback. Its `flush()` method cancels debounce timers and executes all pending saves immediately (used during app shutdown).
 - **Views/** — SwiftUI views. The main view is a continuous-document layout: days flow together without dividers, with date headers styled as inline uppercase headings. `DayTextEditor` uses an always-editable `SyntaxHighlightingTextView` (a `UIViewRepresentable` wrapping `UITextView`) with inline syntax coloring — no edit/display mode switch. `StyledTextView` is retained for read-only contexts (search results). `NavigationStack` with bottom toolbar for Today/Search/Events Only filter/Calendars/Help. `DateScrubber` on right edge. `SearchView` provides cross-day search. All views include VoiceOver labels and reduce-motion support.
 - **Utilities/Strings.swift** — Centralized `LocalizedStringKey` constants for all user-facing strings (localization-ready).
+- **Supporting/PrivacyInfo.xcprivacy** — Apple-required privacy manifest. Declares UserDefaults usage (`CA92.1` — app-only settings for `CalendarSettings` and `@AppStorage`). No tracking, no collected data types, no tracking domains. Must be kept in the Resources build phase.
 
 ## Key Patterns
 - Uses rounded (SF Rounded) fonts throughout for a softer, modern feel. Monospaced is used only for time portions in event lines (e.g., `9:00 AM`) to maintain clean tabular alignment. Parsed event titles use medium weight to visually distinguish them from regular journal text.
@@ -72,6 +73,14 @@ Xcode project: `TextCal.xcodeproj`
 - **Undo/redo preservation** — Since the editor is always-editable (no mode transitions), the `UITextView`'s built-in undo manager is preserved naturally. Text is only overwritten from the store on initial load when the local text is empty.
 - **Week summary view** — `WeekSummaryView` is a text-native week overview showing 7 days as a compact list (Mon–Sun) with condensed event summaries. Each day shows event count, first few titles, and unmatched event count. Navigate weeks with chevron buttons. Tap a day to jump to it. Accessible via Cmd+W or the nav bar week button. Intentionally text-flavored, not a graphical grid.
 - **Move event between days** — Long-press an event line in `StyledTextView` to get a context menu: "Move to Tomorrow" (instant) or "Move to Date..." (date picker). `CalendarStore.moveEventLine()` removes the line from the source day's text and appends it to the target day, then syncs both days to EventKit. This is the text-native equivalent of drag-and-drop — a shortcut for cut/navigate/paste.
+
+## App Store & Release
+- **Bundle ID**: `com.textcal.app`, **Version**: `MARKETING_VERSION` in project.pbxproj, **Build**: `CURRENT_PROJECT_VERSION`.
+- **Privacy manifest**: `Supporting/PrivacyInfo.xcprivacy` declares UserDefaults usage (reason `CA92.1`). If new required-reason APIs are added (e.g., file timestamp, disk space, active keyboard), update this manifest. See Apple's "Describing use of required reason API" documentation.
+- **App icon**: `Supporting/Assets.xcassets/AppIcon.appiconset/AppIcon.png` — 1024x1024 universal icon. Dark background with color-coded event lines, monospaced times, and a text cursor. `Contents.json` references it with `"filename": "AppIcon.png"`.
+- **Privacy**: App is fully on-device — no network calls, no analytics, no third-party SDKs. Only system frameworks (EventKit, SwiftUI, UIKit). Calendar access declared via `NSCalendarsFullAccessUsageDescription` in Info.plist.
+- **Localization**: Architecture is ready (`Strings.swift` with `LocalizedStringKey` constants) but currently English-only. To add languages, create `.lproj` directories with `Localizable.strings` files.
+- **No entitlements file needed**: App uses only standard capabilities (Calendar access, local file storage, UserDefaults).
 
 ## Future Improvements
 - **Natural language input** — Natural language shortcuts (e.g., "lunch tomorrow at noon") that auto-expand to event syntax.
