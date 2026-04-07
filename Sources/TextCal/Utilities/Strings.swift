@@ -69,4 +69,10 @@ enum Strings {
 
     // MARK: - Permission Banner
     static let calendarAccessDenied = LocalizedStringKey("Calendar access denied. Events won't sync.")
+
+    // MARK: - Data Export
+    static let dataSection = LocalizedStringKey("Data")
+    static let exportAllData = LocalizedStringKey("Export All Data")
+    static let exportFooter = LocalizedStringKey("Export all your journal text as a single document. Share it to Files, Mail, or another app to keep a backup.")
+    static let preparingExport = LocalizedStringKey("Preparing export...")
 }

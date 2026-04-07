@@ -1,6 +1,20 @@
 import EventKit
 import Foundation
 
+/// Errors raised by the sync coordinator.
+enum SyncError: Error, CustomStringConvertible {
+    /// Post-sync verification found an unexpected number of events in EventKit.
+    /// This can indicate a silent EventKit failure or a race with an external edit.
+    case verificationFailed(expected: Int, actual: Int)
+
+    var description: String {
+        switch self {
+        case .verificationFailed(let expected, let actual):
+            return "Sync verification failed: expected \(expected) events, found \(actual)"
+        }
+    }
+}
+
 /// Coordinates syncing parsed events to EventKit.
 /// Extracted from CalendarStore to isolate sync logic from state management.
 @MainActor
@@ -46,11 +60,13 @@ struct EventSyncCoordinator {
             let existingNonRecurring = existingEvents.filter { !$0.hasRecurrenceRules }
 
             // Step 1: Create new events (skip those matching existing recurring occurrences)
+            var expectedNewEventCount = 0
             for event in defaultCalEvents {
                 if matchesExistingRecurring(event, existing: existingRecurring, date: date) {
                     continue
                 }
                 try await saveEventToKit(event, date: date, calendar: defaultCal, ekManager: ekManager)
+                expectedNewEventCount += 1
             }
 
             // Step 2: Delete the previously-snapshotted non-recurring events.
@@ -59,6 +75,19 @@ struct EventSyncCoordinator {
             // titles/times happen to coincide.
             if !existingNonRecurring.isEmpty {
                 try await ekManager.removeSpecificEvents(existingNonRecurring)
+            }
+
+            // Step 3: Verification pass. Re-fetch and confirm the final
+            // non-recurring count matches what we expected to create. A
+            // mismatch indicates EventKit silently dropped or duplicated
+            // something — surface it so the caller can retry or alert.
+            let finalEvents = await ekManager.managedEvents(for: date, calendarIdentifier: defaultCal.calendarIdentifier)
+            let finalNonRecurring = finalEvents.filter { !$0.hasRecurrenceRules }
+            if finalNonRecurring.count != expectedNewEventCount {
+                throw SyncError.verificationFailed(
+                    expected: expectedNewEventCount,
+                    actual: finalNonRecurring.count
+                )
             }
         }
 

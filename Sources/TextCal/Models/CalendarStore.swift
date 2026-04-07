@@ -202,15 +202,69 @@ final class CalendarStore {
             eventsByDay[dayKey, default: []].append(event)
         }
 
+        // Opportunistic duplicate cleanup in the default calendar.
+        // Leftover duplicates from a previously-crashed sync self-heal here:
+        // we detect exact duplicates (same title/start/end/allDay) among
+        // non-recurring events in the default calendar and remove extras.
+        // If any duplicates were removed, re-fetch so downstream processing
+        // sees the cleaned state.
+        var dedupedEventsByDay = eventsByDay
+        if let defaultCalId, let ekManager = eventKitManager {
+            var cleanupPerformed = false
+            for (day, dayEvents) in eventsByDay {
+                let defaultCalEvents = dayEvents.filter {
+                    $0.calendar.calendarIdentifier == defaultCalId && !$0.hasRecurrenceRules
+                }
+                if hasDuplicates(defaultCalEvents) {
+                    if let removed = try? await ekManager.removeDuplicateEvents(
+                        for: day, calendarIdentifier: defaultCalId
+                    ), removed > 0 {
+                        cleanupPerformed = true
+                    }
+                }
+            }
+            if cleanupPerformed {
+                let refreshed = await ekManager.events(
+                    from: normalizedStart, to: rangeEnd, excludingCalendars: hidden
+                )
+                dedupedEventsByDay.removeAll(keepingCapacity: true)
+                for event in refreshed {
+                    let dayKey = DateFormatting.normalizeToDay(event.startDate)
+                    dedupedEventsByDay[dayKey, default: []].append(event)
+                }
+            }
+        }
+
         // Process each day's events
         var current = normalizedStart
         let normalizedEnd = DateFormatting.normalizeToDay(end)
         while current <= normalizedEnd {
-            let dayEvents = eventsByDay[current] ?? []
+            let dayEvents = dedupedEventsByDay[current] ?? []
             processEventsForDate(current, ekEvents: dayEvents, defaultCalId: defaultCalId)
             guard let next = cal.date(byAdding: .day, value: 1, to: current) else { break }
             current = next
         }
+    }
+
+    /// Returns true if the given events contain exact duplicates by (title, start, end, isAllDay).
+    private func hasDuplicates(_ events: [EKEvent]) -> Bool {
+        struct Key: Hashable {
+            let title: String
+            let isAllDay: Bool
+            let start: Date
+            let end: Date
+        }
+        var seen = Set<Key>()
+        for event in events {
+            let key = Key(
+                title: event.title ?? "",
+                isAllDay: event.isAllDay,
+                start: event.startDate,
+                end: event.endDate
+            )
+            if !seen.insert(key).inserted { return true }
+        }
+        return false
     }
 
     /// Pre-computed event info to avoid redundant dateComponents calls
@@ -546,6 +600,28 @@ final class CalendarStore {
                 try await fileStore.saveJournal(text, for: date)
             }
         }
+    }
+
+    // MARK: - Export
+
+    /// Export all journal text as a single markdown document.
+    /// Reads directly from disk via FileStore so evicted LRU entries are included.
+    /// Format matches DocumentSerializer: one `# Date` header per day followed
+    /// by the day's raw text. Safe to import into a fresh install.
+    func exportAllDataAsText() async -> String {
+        // Prefer reading from disk (includes LRU-evicted days).
+        // Fall back to in-memory dayTexts if FileStore isn't wired up.
+        var source: [Date: String] = [:]
+        if let fileStore, let loaded = try? await fileStore.loadAllJournals() {
+            source = loaded
+        } else {
+            source = dayTexts
+        }
+        var days: [Date: DayEntry] = [:]
+        for (date, text) in source {
+            days[date] = DayEntry(id: date, rawText: text)
+        }
+        return DocumentSerializer.serialize(days: days)
     }
 
     // MARK: - Migration

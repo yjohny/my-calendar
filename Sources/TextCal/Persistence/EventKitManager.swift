@@ -183,6 +183,56 @@ actor EventKitManager {
         try removeManagedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
     }
 
+    /// Detect and remove exact-duplicate non-recurring events for a date in a
+    /// given calendar. Two events are considered duplicates if they share
+    /// title, isAllDay, startDate, and endDate. The first occurrence (by
+    /// startDate, then by eventIdentifier) is kept; subsequent ones are
+    /// removed. Returns the number of duplicates removed.
+    ///
+    /// Intended as an opportunistic cleanup for duplicates left behind by
+    /// previously-crashed syncs. Recurring events are never touched.
+    @discardableResult
+    func removeDuplicateEvents(for date: Date, calendarIdentifier: String) throws -> Int {
+        let dayEvents = events(for: date).filter {
+            $0.calendar.calendarIdentifier == calendarIdentifier && !$0.hasRecurrenceRules
+        }
+        // Stable ordering so "first" is deterministic across runs
+        let sorted = dayEvents.sorted { a, b in
+            if a.startDate != b.startDate { return a.startDate < b.startDate }
+            return (a.eventIdentifier ?? "") < (b.eventIdentifier ?? "")
+        }
+
+        struct Key: Hashable {
+            let title: String
+            let isAllDay: Bool
+            let start: Date
+            let end: Date
+        }
+
+        var seen = Set<Key>()
+        var toRemove: [EKEvent] = []
+        for event in sorted {
+            let key = Key(
+                title: event.title ?? "",
+                isAllDay: event.isAllDay,
+                start: event.startDate,
+                end: event.endDate
+            )
+            if seen.contains(key) {
+                toRemove.append(event)
+            } else {
+                seen.insert(key)
+            }
+        }
+
+        guard !toRemove.isEmpty else { return 0 }
+        for event in toRemove {
+            try store.remove(event, span: .thisEvent, commit: false)
+        }
+        try store.commit()
+        return toRemove.count
+    }
+
     /// Remove a specific set of pre-captured events in a single batched commit.
     /// Used by the create-before-delete sync flow: callers snapshot events
     /// *before* creating new ones, then pass the snapshot here to delete only
