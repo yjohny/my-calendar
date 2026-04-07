@@ -450,10 +450,19 @@ final class CalendarStore {
 
     /// Force an immediate save of all pending changes (e.g., on app background or termination).
     /// Flushes the debounce coalescer to ensure queued saves execute immediately,
-    /// cancels any in-flight EventKit sync task, and writes all cached day texts to disk.
+    /// awaits any in-flight EventKit sync so mid-sync operations complete, and
+    /// writes all cached day texts to disk.
     func forceSave() async {
-        // Cancel any debounced EventKit sync — it's not safe during shutdown
-        syncTask?.cancel()
+        // Cancel the debounce sleep but AWAIT the task to completion.
+        // - If sleep hadn't fired yet: cancel makes the task return early (no sync ran)
+        // - If sync was in progress: the task runs to completion (EventKit ops don't
+        //   check cooperative cancellation), so we wait for it to finish before suspension.
+        // This prevents the app from being suspended mid-sync, which could otherwise
+        // leave EventKit in an inconsistent state on termination.
+        if let task = syncTask {
+            task.cancel()
+            await task.value
+        }
         syncTask = nil
 
         // Flush the coalescer so any debounced file saves execute immediately

@@ -30,19 +30,35 @@ struct EventSyncCoordinator {
             }
         }
 
-        // Default calendar: safe to delete-and-recreate (we own these events)
+        // Default calendar: create-before-delete for crash safety.
+        //
+        // Safety rationale: if the app is killed mid-sync, we want to leave
+        // duplicates (self-healing on next sync) rather than deletions (unrecoverable).
+        // Sequence:
+        //   1. Snapshot existing events (capture recurring + non-recurring for later)
+        //   2. Create all new events first
+        //   3. Delete only the specifically-snapshotted old non-recurring events
+        // A crash at step 2 leaves old events intact (no data loss).
+        // A crash at step 3 leaves duplicates that will be reconciled on next sync.
         if let defaultCal = defaultCal {
-            let calId = defaultCal.calendarIdentifier
-            let existingEvents = await ekManager.managedEvents(for: date, calendarIdentifier: calId)
+            let existingEvents = await ekManager.managedEvents(for: date, calendarIdentifier: defaultCal.calendarIdentifier)
             let existingRecurring = existingEvents.filter { $0.hasRecurrenceRules }
+            let existingNonRecurring = existingEvents.filter { !$0.hasRecurrenceRules }
 
-            try await ekManager.removeManagedEvents(for: date, calendarIdentifier: calId)
-
+            // Step 1: Create new events (skip those matching existing recurring occurrences)
             for event in defaultCalEvents {
                 if matchesExistingRecurring(event, existing: existingRecurring, date: date) {
                     continue
                 }
                 try await saveEventToKit(event, date: date, calendar: defaultCal, ekManager: ekManager)
+            }
+
+            // Step 2: Delete the previously-snapshotted non-recurring events.
+            // Only delete events we captured before creating new ones — this
+            // guarantees we never delete a newly-created event, even if
+            // titles/times happen to coincide.
+            if !existingNonRecurring.isEmpty {
+                try await ekManager.removeSpecificEvents(existingNonRecurring)
             }
         }
 

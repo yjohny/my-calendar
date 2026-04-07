@@ -4,10 +4,26 @@ import Foundation
 /// Events are stored in EventKit; this only handles freeform text.
 ///
 /// Directory structure:
-///   Documents/textcal/journal/2026-03-08.txt
+///   Documents/textcal/schema.json            — schema version marker
+///   Documents/textcal/journal/2026-03-08.txt — one file per day, plain text
+///
+/// Schema versioning:
+/// The `schema.json` file records the on-disk format version so future
+/// releases can detect old layouts and migrate forward. It's written on
+/// first save and read on load. A missing file is treated as the oldest
+/// known version (legacy migration path). Per-day files are kept as plain
+/// text (no embedded header) so users can open/edit them in the Files app
+/// without format concerns.
 actor FileStore {
+    /// Current on-disk schema version. Bump when the file layout changes.
+    /// History:
+    ///   1 — per-day plain-text .txt files under textcal/journal/
+    static let currentSchemaVersion = 1
+
+    private let rootDir: URL
     private let journalDir: URL
     private let legacyFileURL: URL
+    private let schemaFileURL: URL
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -18,13 +34,52 @@ actor FileStore {
 
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.journalDir = docs.appendingPathComponent("textcal/journal", isDirectory: true)
+        self.rootDir = docs.appendingPathComponent("textcal", isDirectory: true)
+        self.journalDir = rootDir.appendingPathComponent("journal", isDirectory: true)
         self.legacyFileURL = docs.appendingPathComponent("calendar.md")
+        self.schemaFileURL = rootDir.appendingPathComponent("schema.json")
     }
 
     /// Ensure the journal directory exists
     func ensureDirectory() throws {
         try FileManager.default.createDirectory(at: journalDir, withIntermediateDirectories: true)
+        writeSchemaIfNeeded()
+    }
+
+    // MARK: - Schema Version
+
+    /// On-disk schema envelope for textcal/schema.json.
+    /// Unknown fields are preserved by decoding permissively; future fields
+    /// can be added without breaking older builds.
+    private struct SchemaFile: Codable {
+        var version: Int
+        var format: String
+        var writtenBy: String?
+    }
+
+    /// Read the on-disk schema version, or nil if no schema file exists.
+    /// Callers use this to decide whether to run a migration.
+    func readSchemaVersion() -> Int? {
+        guard FileManager.default.fileExists(atPath: schemaFileURL.path),
+              let data = try? Data(contentsOf: schemaFileURL),
+              let schema = try? JSONDecoder().decode(SchemaFile.self, from: data) else {
+            return nil
+        }
+        return schema.version
+    }
+
+    /// Write the current schema marker if missing or out-of-date. Non-fatal on failure.
+    private func writeSchemaIfNeeded() {
+        let existing = readSchemaVersion()
+        if existing == Self.currentSchemaVersion { return }
+        let schema = SchemaFile(
+            version: Self.currentSchemaVersion,
+            format: "per-day-txt",
+            writtenBy: "TextCal"
+        )
+        guard let data = try? JSONEncoder().encode(schema) else { return }
+        try? FileManager.default.createDirectory(at: rootDir, withIntermediateDirectories: true)
+        try? data.write(to: schemaFileURL, options: .atomic)
     }
 
     /// Load journal text for a specific date

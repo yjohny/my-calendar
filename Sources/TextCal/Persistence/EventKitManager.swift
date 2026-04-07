@@ -183,6 +183,24 @@ actor EventKitManager {
         try removeManagedEvents(for: date, calendarIdentifier: cal.calendarIdentifier)
     }
 
+    /// Remove a specific set of pre-captured events in a single batched commit.
+    /// Used by the create-before-delete sync flow: callers snapshot events
+    /// *before* creating new ones, then pass the snapshot here to delete only
+    /// those exact events. This prevents accidentally deleting newly-created
+    /// events if titles/times coincide.
+    /// Recurring events in the set are skipped (never delete occurrences).
+    func removeSpecificEvents(_ events: [EKEvent]) throws {
+        var didRemove = false
+        for event in events {
+            if event.hasRecurrenceRules { continue }
+            try store.remove(event, span: .thisEvent, commit: false)
+            didRemove = true
+        }
+        if didRemove {
+            try store.commit()
+        }
+    }
+
     /// Remove non-recurring events for a given date in the specified calendar.
     /// Batches removals into a single commit for better performance.
     func removeManagedEvents(for date: Date, calendarIdentifier: String) throws {
