@@ -1,6 +1,20 @@
 import EventKit
 import Foundation
 
+/// Errors raised by the sync coordinator.
+enum SyncError: Error, CustomStringConvertible {
+    /// Post-sync verification found an unexpected number of events in EventKit.
+    /// This can indicate a silent EventKit failure or a race with an external edit.
+    case verificationFailed(expected: Int, actual: Int)
+
+    var description: String {
+        switch self {
+        case .verificationFailed(let expected, let actual):
+            return "Sync verification failed: expected \(expected) events, found \(actual)"
+        }
+    }
+}
+
 /// Coordinates syncing parsed events to EventKit.
 /// Extracted from CalendarStore to isolate sync logic from state management.
 @MainActor
@@ -30,19 +44,50 @@ struct EventSyncCoordinator {
             }
         }
 
-        // Default calendar: safe to delete-and-recreate (we own these events)
+        // Default calendar: create-before-delete for crash safety.
+        //
+        // Safety rationale: if the app is killed mid-sync, we want to leave
+        // duplicates (self-healing on next sync) rather than deletions (unrecoverable).
+        // Sequence:
+        //   1. Snapshot existing events (capture recurring + non-recurring for later)
+        //   2. Create all new events first
+        //   3. Delete only the specifically-snapshotted old non-recurring events
+        // A crash at step 2 leaves old events intact (no data loss).
+        // A crash at step 3 leaves duplicates that will be reconciled on next sync.
         if let defaultCal = defaultCal {
-            let calId = defaultCal.calendarIdentifier
-            let existingEvents = await ekManager.managedEvents(for: date, calendarIdentifier: calId)
+            let existingEvents = await ekManager.managedEvents(for: date, calendarIdentifier: defaultCal.calendarIdentifier)
             let existingRecurring = existingEvents.filter { $0.hasRecurrenceRules }
+            let existingNonRecurring = existingEvents.filter { !$0.hasRecurrenceRules }
 
-            try await ekManager.removeManagedEvents(for: date, calendarIdentifier: calId)
-
+            // Step 1: Create new events (skip those matching existing recurring occurrences)
+            var expectedNewEventCount = 0
             for event in defaultCalEvents {
                 if matchesExistingRecurring(event, existing: existingRecurring, date: date) {
                     continue
                 }
                 try await saveEventToKit(event, date: date, calendar: defaultCal, ekManager: ekManager)
+                expectedNewEventCount += 1
+            }
+
+            // Step 2: Delete the previously-snapshotted non-recurring events.
+            // Only delete events we captured before creating new ones — this
+            // guarantees we never delete a newly-created event, even if
+            // titles/times happen to coincide.
+            if !existingNonRecurring.isEmpty {
+                try await ekManager.removeSpecificEvents(existingNonRecurring)
+            }
+
+            // Step 3: Verification pass. Re-fetch and confirm the final
+            // non-recurring count matches what we expected to create. A
+            // mismatch indicates EventKit silently dropped or duplicated
+            // something — surface it so the caller can retry or alert.
+            let finalEvents = await ekManager.managedEvents(for: date, calendarIdentifier: defaultCal.calendarIdentifier)
+            let finalNonRecurring = finalEvents.filter { !$0.hasRecurrenceRules }
+            if finalNonRecurring.count != expectedNewEventCount {
+                throw SyncError.verificationFailed(
+                    expected: expectedNewEventCount,
+                    actual: finalNonRecurring.count
+                )
             }
         }
 

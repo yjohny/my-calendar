@@ -264,7 +264,8 @@ struct CalendarDocumentView: View {
             CalendarPickerView(
                 calendars: writableCalendars,
                 selectedIdentifier: $defaultCalendarId,
-                calendarSettings: store.calendarSettings
+                calendarSettings: store.calendarSettings,
+                store: store
             )
             .onDisappear {
                 store.calendarSettings?.defaultCalendarIdentifier = defaultCalendarId

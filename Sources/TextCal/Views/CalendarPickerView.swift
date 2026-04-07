@@ -6,9 +6,13 @@ struct CalendarPickerView: View {
     let calendars: [EKCalendar]
     @Binding var selectedIdentifier: String?
     let calendarSettings: CalendarSettings?
+    /// Optional store used for data export. When nil, the export section is hidden.
+    var store: CalendarStore?
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .body) private var dotSize: CGFloat = 12
     @State private var hiddenIds: Set<String> = []
+    @State private var exportedText: String?
+    @State private var isExporting = false
 
     var body: some View {
         NavigationView {
@@ -70,6 +74,51 @@ struct CalendarPickerView: View {
                     Text(Strings.calendarVisibility)
                 } footer: {
                     Text(Strings.calendarVisibilityFooter)
+                }
+
+                if let store {
+                    Section {
+                        if let exportedText {
+                            ShareLink(
+                                item: exportedText,
+                                preview: SharePreview("TextCal Export")
+                            ) {
+                                HStack {
+                                    Image(systemName: "square.and.arrow.up")
+                                    Text(Strings.exportAllData)
+                                        .font(.system(.body, design: .rounded))
+                                }
+                            }
+                        } else {
+                            Button {
+                                isExporting = true
+                                Task {
+                                    let text = await store.exportAllDataAsText()
+                                    await MainActor.run {
+                                        exportedText = text
+                                        isExporting = false
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "square.and.arrow.up")
+                                    Text(isExporting ? Strings.preparingExport : Strings.exportAllData)
+                                        .font(.system(.body, design: .rounded))
+                                    if isExporting {
+                                        Spacer()
+                                        ProgressView()
+                                    }
+                                }
+                            }
+                            .disabled(isExporting)
+                            .accessibilityLabel(Strings.exportAllData)
+                            .accessibilityHint("Creates a single document with all your journal text for backup")
+                        }
+                    } header: {
+                        Text(Strings.dataSection)
+                    } footer: {
+                        Text(Strings.exportFooter)
+                    }
                 }
             }
             .navigationTitle(Strings.calendarsButton)
