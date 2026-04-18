@@ -143,13 +143,57 @@ actor FileStore {
         try? data.write(to: schemaFileURL, options: .atomic)
     }
 
-    /// Load journal text for a specific date
+    /// Load journal text for a specific date. If iCloud has produced
+    /// unresolved conflict versions for the file, they're merged inline
+    /// with a visible separator so the user can sort them out in text.
     func loadJournal(for date: Date) async throws -> String {
         let url = fileURL(for: date)
+        // Pull the file down from iCloud if it's only a placeholder. Safe
+        // no-op when the file lives locally.
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
         guard FileManager.default.fileExists(atPath: url.path) else {
             return ""
         }
+        _ = try? Self.resolveConflictsIfAny(at: url)
         return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// Merge any unresolved iCloud conflict versions for `url` back into the
+    /// main file, tagged with the saving device and timestamp. Returns the
+    /// merged content, or nil if there were no conflicts. Conflict versions
+    /// are marked resolved and removed once folded in.
+    @discardableResult
+    private static func resolveConflictsIfAny(at url: URL) throws -> String? {
+        guard let conflicts = NSFileVersion.unresolvedConflictVersionsOfItem(at: url),
+              !conflicts.isEmpty else { return nil }
+
+        let current = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        var merged = current
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+
+        for version in conflicts {
+            let content = (try? String(contentsOf: version.url, encoding: .utf8)) ?? ""
+            let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Skip empties and exact duplicates of the current file.
+            if trimmedContent.isEmpty || content == current {
+                version.isResolved = true
+                continue
+            }
+            let device = version.localizedNameOfSavingComputer ?? "another device"
+            let when = version.modificationDate.map { formatter.string(from: $0) } ?? ""
+            let header = "\n\n--- conflict from \(device) at \(when) ---\n\n"
+            merged += header + content
+            version.isResolved = true
+        }
+
+        if merged != current {
+            try merged.write(to: url, atomically: true, encoding: .utf8)
+        }
+        // Remove the sidecar conflict files now that they're folded in.
+        try? NSFileVersion.removeOtherVersionsOfItem(at: url)
+        return merged
     }
 
     /// Save journal text for a specific date

@@ -5,6 +5,7 @@ enum Strings {
     // MARK: - Sync Status
     static let saving = LocalizedStringKey("Saving...")
     static let syncing = LocalizedStringKey("Syncing...")
+    static let cloudSyncing = LocalizedStringKey("iCloud...")
     static let saveFailed = "Save failed"
     static let syncFailed = "Sync failed"
 

@@ -97,6 +97,15 @@ struct DayTextEditor: View {
         .onChange(of: date) { _, _ in
             refreshState()
         }
+        .onChange(of: store.dayTexts[DateFormatting.normalizeToDay(date)] ?? "") { _, newValue in
+            // Remote change arrived (e.g., from iCloud via CloudWatcher).
+            // Adopt it only when the user isn't mid-edit and the store text
+            // actually differs from what we're displaying — the same
+            // observer fires when our own `store.update(...)` writes back.
+            guard !userHasLocalEdits, newValue != text else { return }
+            text = newValue
+            conflicts = detectConflicts(in: text)
+        }
         .task(id: date) {
             await loadCalendarNames()
         }

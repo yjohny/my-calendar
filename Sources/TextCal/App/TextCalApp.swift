@@ -12,18 +12,22 @@ struct TextCalApp: App {
                 .task {
                     let settings = CalendarSettings()
                     let baseURL = await Self.resolveBaseURL(settings: settings)
+                    let usingCloud = settings.iCloudSyncEnabled && baseURL != FileStore.localBaseURL()
                     let eventKitManager = EventKitManager()
                     let fileStore = FileStore(baseURL: baseURL)
                     let templateStore = TemplateStore(baseURL: baseURL)
                     let coalescer = ChangeCoalescer()
+                    let cloudWatcher: CloudWatcher? = usingCloud ? CloudWatcher() : nil
                     store.configure(
                         eventKitManager: eventKitManager,
                         fileStore: fileStore,
                         coalescer: coalescer,
                         calendarSettings: settings,
-                        templateStore: templateStore
+                        templateStore: templateStore,
+                        cloudWatcher: cloudWatcher
                     )
                     await store.load()
+                    cloudWatcher?.start()
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in
