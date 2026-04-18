@@ -83,7 +83,7 @@ Xcode project: `TextCal.xcodeproj`
 - **Data export** — `CalendarStore.exportAllDataAsText()` reads all journal files via `FileStore.loadAllJournals()` (so LRU-evicted days are included) and serializes them via `DocumentSerializer.serialize()`. `CalendarPickerView` exposes an "Export All Data" button in a "Data" section — the button kicks off the async export and then swaps itself for a `ShareLink` once the text is ready. The picker takes an optional `store: CalendarStore?` parameter; the export section is hidden if it's nil.
 
 ## App Store & Release
-- **Bundle ID**: `com.textcal.app`, **Version**: `MARKETING_VERSION` in project.pbxproj, **Build**: `CURRENT_PROJECT_VERSION` (debug only — see below).
+- **Bundle ID**: `com.yjohny.textcal`, **Version**: `MARKETING_VERSION` in project.pbxproj, **Build**: `CURRENT_PROJECT_VERSION` (debug only — see below).
 - **Auto-incrementing build number**: A "Set Build Number from Git" Run Script build phase runs only on archive (`ACTION == install`). It computes `git rev-list HEAD --count` and writes it into the *built* `Info.plist` via PlistBuddy, leaving the source `CURRENT_PROJECT_VERSION` untouched (no git churn). Each archive uploaded to TestFlight gets a fresh, monotonic build number tied to commit history. Debug builds keep `CURRENT_PROJECT_VERSION = 1`.
 - **Encryption export compliance**: `Info.plist` declares `ITSAppUsesNonExemptEncryption = NO` so App Store Connect skips the encryption questionnaire on every build. App uses no custom crypto — only system frameworks.
 - **Privacy policy**: `PRIVACY.md` at the repo root is the canonical privacy statement. Host it (GitHub Pages, raw GitHub URL, etc.) and use that URL as the Privacy Policy URL in App Store Connect — required for external TestFlight testing.
