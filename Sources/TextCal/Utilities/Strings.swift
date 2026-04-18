@@ -85,5 +85,8 @@ enum Strings {
     static let iCloudUnavailableMessage = LocalizedStringKey("Sign in to iCloud and enable iCloud Drive in Settings, then try again.")
     static let relaunchRequiredTitle = LocalizedStringKey("Relaunch to Apply")
     static let relaunchRequiredMessage = LocalizedStringKey("Quit and reopen TextCal to start using the new storage location. Your existing journal will be copied over automatically.")
+    static let bothSidesDataTitle = LocalizedStringKey("Journal Exists on Both Sides")
+    static let bothSidesDataMessage = LocalizedStringKey("Your device and iCloud each have TextCal journal files. Days that exist in only one will be copied across, but for days that exist in both with different text, the version on your chosen storage wins — the other copy stays on disk but won't appear in the app. Consider using Export All Data first.")
     static let ok = LocalizedStringKey("OK")
+    static let continueAction = LocalizedStringKey("Continue")
 }

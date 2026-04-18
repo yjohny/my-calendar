@@ -54,12 +54,16 @@ actor FileStore {
         return container.appendingPathComponent("Documents", isDirectory: true)
     }
 
-    /// Seed the `textcal/` tree at `destination` from `source`, but only if
-    /// the destination is empty (no journal files and no templates). Returns
-    /// the number of files copied. This is a one-shot seed, not a continuous
-    /// sync — once both sides have data, each side is considered authoritative
-    /// for its own storage mode. Used to bootstrap the user's data into the
-    /// new base when they first toggle iCloud sync on or off.
+    /// Per-file union copy of the `textcal/` tree from `source` into
+    /// `destination`. For each file in source, if no file with the same
+    /// relative path exists at destination, copy it over; otherwise leave
+    /// the destination file untouched. Returns the number of files copied.
+    ///
+    /// This is a union, not a merge: days or templates present on only
+    /// one side get propagated, but days present on both sides with
+    /// different content stay as-is on the destination. Callers that need
+    /// to warn the user about divergent content should check `hasAnyData`
+    /// on both bases before invoking this.
     @discardableResult
     static func migrateTextCalTree(from source: URL, to destination: URL) throws -> Int {
         let fm = FileManager.default
@@ -67,15 +71,6 @@ actor FileStore {
         guard fm.fileExists(atPath: sourceRoot.path) else { return 0 }
 
         let destRoot = destination.appendingPathComponent("textcal", isDirectory: true)
-        // Only seed when destination has no journal files and no templates.
-        // Anything more complex (bidirectional merge) is out of scope here —
-        // the user keeps files on both sides once both are populated.
-        let destJournal = destRoot.appendingPathComponent("journal", isDirectory: true)
-        let destTemplates = destRoot.appendingPathComponent("templates.json")
-        let journalFiles = (try? fm.contentsOfDirectory(at: destJournal, includingPropertiesForKeys: nil)) ?? []
-        let hasData = !journalFiles.isEmpty || fm.fileExists(atPath: destTemplates.path)
-        if hasData { return 0 }
-
         try fm.createDirectory(at: destRoot, withIntermediateDirectories: true)
 
         var copied = 0
@@ -99,6 +94,20 @@ actor FileStore {
             }
         }
         return copied
+    }
+
+    /// True when the given base URL has any journal files or a templates.json
+    /// under `textcal/`. Used to warn the user when both local and cloud
+    /// bases have data — a union migration won't overwrite anything, but the
+    /// user still loses visibility into whichever side's versions lose out
+    /// for days that exist in both places.
+    static func hasAnyData(at baseURL: URL) -> Bool {
+        let fm = FileManager.default
+        let journal = baseURL.appendingPathComponent("textcal/journal", isDirectory: true)
+        let files = (try? fm.contentsOfDirectory(at: journal, includingPropertiesForKeys: nil)) ?? []
+        if files.contains(where: { $0.pathExtension == "txt" }) { return true }
+        let templates = baseURL.appendingPathComponent("textcal/templates.json")
+        return fm.fileExists(atPath: templates.path)
     }
 
     /// Ensure the journal directory exists

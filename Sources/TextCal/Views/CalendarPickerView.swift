@@ -16,6 +16,8 @@ struct CalendarPickerView: View {
     @State private var iCloudSyncEnabled = false
     @State private var showICloudUnavailableAlert = false
     @State private var showRelaunchAlert = false
+    @State private var showBothSidesWarning = false
+    @State private var pendingSyncValue: Bool?
 
     var body: some View {
         NavigationView {
@@ -164,32 +166,61 @@ struct CalendarPickerView: View {
             } message: {
                 Text(Strings.relaunchRequiredMessage)
             }
+            .alert(Strings.bothSidesDataTitle, isPresented: $showBothSidesWarning) {
+                Button(Strings.continueAction, role: .destructive) {
+                    applyPendingSyncValue()
+                }
+                Button(Strings.cancel, role: .cancel) {
+                    pendingSyncValue = nil
+                    iCloudSyncEnabled = calendarSettings?.iCloudSyncEnabled ?? false
+                }
+            } message: {
+                Text(Strings.bothSidesDataMessage)
+            }
         }
     }
 
     /// Persist the iCloud sync toggle. When turning on, verify the ubiquity
     /// container is reachable — if not, revert the toggle and tell the user.
-    /// A successful flip prompts the user to relaunch the app.
+    /// If both local and iCloud already hold journal files, surface a
+    /// divergence warning first so the user understands which side will
+    /// win on same-day collisions. A successful flip prompts for relaunch.
     private func setICloudSync(_ newValue: Bool) {
-        guard let calendarSettings else { return }
-        if newValue {
-            Task { @MainActor in
+        guard calendarSettings != nil else { return }
+        Task { @MainActor in
+            if newValue {
                 let available = await Task.detached(priority: .userInitiated) {
                     FileStore.cloudBaseURL() != nil
                 }.value
-                if available {
-                    calendarSettings.iCloudSyncEnabled = true
-                    iCloudSyncEnabled = true
-                    showRelaunchAlert = true
-                } else {
+                guard available else {
                     iCloudSyncEnabled = false
                     showICloudUnavailableAlert = true
+                    return
                 }
             }
-        } else {
-            calendarSettings.iCloudSyncEnabled = false
-            iCloudSyncEnabled = false
-            showRelaunchAlert = true
+            let bothHaveData = await Task.detached(priority: .userInitiated) {
+                guard let cloud = FileStore.cloudBaseURL() else { return false }
+                return FileStore.hasAnyData(at: FileStore.localBaseURL())
+                    && FileStore.hasAnyData(at: cloud)
+            }.value
+            if bothHaveData {
+                pendingSyncValue = newValue
+                showBothSidesWarning = true
+            } else {
+                pendingSyncValue = newValue
+                applyPendingSyncValue()
+            }
         }
+    }
+
+    /// Commit the pending toggle value to UserDefaults and tell the user
+    /// to relaunch. Called either directly from `setICloudSync` when no
+    /// warning was needed, or from the warning alert's "Continue" button.
+    private func applyPendingSyncValue() {
+        guard let calendarSettings, let newValue = pendingSyncValue else { return }
+        calendarSettings.iCloudSyncEnabled = newValue
+        iCloudSyncEnabled = newValue
+        pendingSyncValue = nil
+        showRelaunchAlert = true
     }
 }
