@@ -75,4 +75,14 @@ enum Strings {
     static let exportAllData = LocalizedStringKey("Export All Data")
     static let exportFooter = LocalizedStringKey("Export all your journal text as a single document. Share it to Files, Mail, or another app to keep a backup.")
     static let preparingExport = LocalizedStringKey("Preparing export...")
+
+    // MARK: - iCloud Sync
+    static let syncSection = LocalizedStringKey("Sync")
+    static let iCloudSyncToggle = LocalizedStringKey("Sync via iCloud")
+    static let iCloudSyncFooter = LocalizedStringKey("When on, your journal text and templates are stored in iCloud Drive so they appear on all your devices signed into the same Apple ID. Events already sync via your Calendar accounts. Relaunch TextCal after changing this setting.")
+    static let iCloudUnavailableTitle = LocalizedStringKey("iCloud Not Available")
+    static let iCloudUnavailableMessage = LocalizedStringKey("Sign in to iCloud and enable iCloud Drive in Settings, then try again.")
+    static let relaunchRequiredTitle = LocalizedStringKey("Relaunch to Apply")
+    static let relaunchRequiredMessage = LocalizedStringKey("Quit and reopen TextCal to start using the new storage location. Your existing journal will be copied over automatically.")
+    static let ok = LocalizedStringKey("OK")
 }

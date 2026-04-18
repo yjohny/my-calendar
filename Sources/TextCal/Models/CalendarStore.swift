@@ -36,7 +36,7 @@ final class CalendarStore {
     private var fileStore: FileStore?
     private var coalescer: ChangeCoalescer?
     private(set) var calendarSettings: CalendarSettings?
-    private(set) var templateStore: TemplateStore = TemplateStore()
+    private(set) var templateStore: TemplateStore = TemplateStore(baseURL: FileStore.localBaseURL())
 
     /// Debounce EventKit sync to avoid re-syncing on every keystroke
     private var syncTask: Task<Void, Never>?
@@ -58,11 +58,14 @@ final class CalendarStore {
     init() {}
 
     /// Connect to persistence layers
-    func configure(eventKitManager: EventKitManager, fileStore: FileStore, coalescer: ChangeCoalescer, calendarSettings: CalendarSettings = CalendarSettings()) {
+    func configure(eventKitManager: EventKitManager, fileStore: FileStore, coalescer: ChangeCoalescer, calendarSettings: CalendarSettings = CalendarSettings(), templateStore: TemplateStore? = nil) {
         self.eventKitManager = eventKitManager
         self.fileStore = fileStore
         self.coalescer = coalescer
         self.calendarSettings = calendarSettings
+        if let templateStore {
+            self.templateStore = templateStore
+        }
 
         // Wire up error reporting from the coalescer
         Task {

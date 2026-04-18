@@ -32,9 +32,8 @@ actor TemplateStore {
 
     private let fileURL: URL
 
-    init() {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.fileURL = docs.appendingPathComponent("textcal/templates.json")
+    init(baseURL: URL) {
+        self.fileURL = baseURL.appendingPathComponent("textcal/templates.json")
     }
 
     func load() -> [EventTemplate] {

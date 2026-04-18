@@ -32,12 +32,73 @@ actor FileStore {
         return f
     }()
 
-    init() {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.rootDir = docs.appendingPathComponent("textcal", isDirectory: true)
+    init(baseURL: URL) {
+        self.rootDir = baseURL.appendingPathComponent("textcal", isDirectory: true)
         self.journalDir = rootDir.appendingPathComponent("journal", isDirectory: true)
-        self.legacyFileURL = docs.appendingPathComponent("calendar.md")
+        self.legacyFileURL = baseURL.appendingPathComponent("calendar.md")
         self.schemaFileURL = rootDir.appendingPathComponent("schema.json")
+    }
+
+    /// Local Documents directory. Always available.
+    static func localBaseURL() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    }
+
+    /// iCloud Drive base URL for the app's ubiquity container, or nil if
+    /// the user is not signed into iCloud or the container isn't provisioned.
+    /// This call can block briefly on first use; call off the main thread.
+    static func cloudBaseURL() -> URL? {
+        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
+            return nil
+        }
+        return container.appendingPathComponent("Documents", isDirectory: true)
+    }
+
+    /// Seed the `textcal/` tree at `destination` from `source`, but only if
+    /// the destination is empty (no journal files and no templates). Returns
+    /// the number of files copied. This is a one-shot seed, not a continuous
+    /// sync — once both sides have data, each side is considered authoritative
+    /// for its own storage mode. Used to bootstrap the user's data into the
+    /// new base when they first toggle iCloud sync on or off.
+    @discardableResult
+    static func migrateTextCalTree(from source: URL, to destination: URL) throws -> Int {
+        let fm = FileManager.default
+        let sourceRoot = source.appendingPathComponent("textcal", isDirectory: true)
+        guard fm.fileExists(atPath: sourceRoot.path) else { return 0 }
+
+        let destRoot = destination.appendingPathComponent("textcal", isDirectory: true)
+        // Only seed when destination has no journal files and no templates.
+        // Anything more complex (bidirectional merge) is out of scope here —
+        // the user keeps files on both sides once both are populated.
+        let destJournal = destRoot.appendingPathComponent("journal", isDirectory: true)
+        let destTemplates = destRoot.appendingPathComponent("templates.json")
+        let journalFiles = (try? fm.contentsOfDirectory(at: destJournal, includingPropertiesForKeys: nil)) ?? []
+        let hasData = !journalFiles.isEmpty || fm.fileExists(atPath: destTemplates.path)
+        if hasData { return 0 }
+
+        try fm.createDirectory(at: destRoot, withIntermediateDirectories: true)
+
+        var copied = 0
+        let keys: Set<URLResourceKey> = [.isDirectoryKey]
+        guard let enumerator = fm.enumerator(at: sourceRoot, includingPropertiesForKeys: Array(keys)) else {
+            return 0
+        }
+        let sourcePrefix = sourceRoot.path
+        for case let fileURL as URL in enumerator {
+            let isDir = (try? fileURL.resourceValues(forKeys: keys))?.isDirectory ?? false
+            var relative = String(fileURL.path.dropFirst(sourcePrefix.count))
+            while relative.hasPrefix("/") { relative.removeFirst() }
+            guard !relative.isEmpty else { continue }
+            let destURL = destRoot.appendingPathComponent(relative)
+            if isDir {
+                try? fm.createDirectory(at: destURL, withIntermediateDirectories: true)
+            } else if !fm.fileExists(atPath: destURL.path) {
+                try fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(at: fileURL, to: destURL)
+                copied += 1
+            }
+        }
+        return copied
     }
 
     /// Ensure the journal directory exists

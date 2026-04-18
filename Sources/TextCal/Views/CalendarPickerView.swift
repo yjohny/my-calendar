@@ -13,6 +13,9 @@ struct CalendarPickerView: View {
     @State private var hiddenIds: Set<String> = []
     @State private var exportedText: String?
     @State private var isExporting = false
+    @State private var iCloudSyncEnabled = false
+    @State private var showICloudUnavailableAlert = false
+    @State private var showRelaunchAlert = false
 
     var body: some View {
         NavigationView {
@@ -76,6 +79,25 @@ struct CalendarPickerView: View {
                     Text(Strings.calendarVisibilityFooter)
                 }
 
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { iCloudSyncEnabled },
+                        set: { newValue in setICloudSync(newValue) }
+                    )) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "icloud")
+                                .foregroundStyle(Color.accentColor)
+                            Text(Strings.iCloudSyncToggle)
+                                .font(.system(.body, design: .rounded))
+                        }
+                    }
+                    .accessibilityHint("Stores journal text and templates in iCloud Drive so they sync across your devices")
+                } header: {
+                    Text(Strings.syncSection)
+                } footer: {
+                    Text(Strings.iCloudSyncFooter)
+                }
+
                 if let store {
                     Section {
                         if let exportedText {
@@ -130,7 +152,44 @@ struct CalendarPickerView: View {
             }
             .onAppear {
                 hiddenIds = calendarSettings?.hiddenCalendarIdentifiers ?? []
+                iCloudSyncEnabled = calendarSettings?.iCloudSyncEnabled ?? false
             }
+            .alert(Strings.iCloudUnavailableTitle, isPresented: $showICloudUnavailableAlert) {
+                Button(Strings.ok, role: .cancel) {}
+            } message: {
+                Text(Strings.iCloudUnavailableMessage)
+            }
+            .alert(Strings.relaunchRequiredTitle, isPresented: $showRelaunchAlert) {
+                Button(Strings.ok, role: .cancel) {}
+            } message: {
+                Text(Strings.relaunchRequiredMessage)
+            }
+        }
+    }
+
+    /// Persist the iCloud sync toggle. When turning on, verify the ubiquity
+    /// container is reachable — if not, revert the toggle and tell the user.
+    /// A successful flip prompts the user to relaunch the app.
+    private func setICloudSync(_ newValue: Bool) {
+        guard let calendarSettings else { return }
+        if newValue {
+            Task { @MainActor in
+                let available = await Task.detached(priority: .userInitiated) {
+                    FileStore.cloudBaseURL() != nil
+                }.value
+                if available {
+                    calendarSettings.iCloudSyncEnabled = true
+                    iCloudSyncEnabled = true
+                    showRelaunchAlert = true
+                } else {
+                    iCloudSyncEnabled = false
+                    showICloudUnavailableAlert = true
+                }
+            }
+        } else {
+            calendarSettings.iCloudSyncEnabled = false
+            iCloudSyncEnabled = false
+            showRelaunchAlert = true
         }
     }
 }

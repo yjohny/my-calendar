@@ -47,6 +47,15 @@ final class CalendarSettings {
     }
 
     private let hiddenKey = "hiddenCalendarIdentifiers"
+    private let iCloudSyncKey = "iCloudSyncEnabled"
+
+    /// Whether per-day journal files and templates are stored in the app's
+    /// iCloud Drive container instead of local Documents. Device-local; each
+    /// device opts in independently. Changes take effect on next launch.
+    var iCloudSyncEnabled: Bool {
+        get { defaults.bool(forKey: iCloudSyncKey) }
+        set { defaults.set(newValue, forKey: iCloudSyncKey) }
+    }
 
     /// Set of calendar identifiers the user has hidden from display.
     var hiddenCalendarIdentifiers: Set<String> {
