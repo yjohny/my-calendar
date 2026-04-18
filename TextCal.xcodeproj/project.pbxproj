@@ -242,6 +242,7 @@
 				E10000000000000000000002 /* Sources */,
 				E10000000000000000000003 /* Resources */,
 				C10000000000000000000001 /* Frameworks */,
+				G10000000000000000000001 /* Set Build Number from Git */,
 			);
 			buildRules = (
 			);
@@ -296,6 +297,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		G10000000000000000000001 /* Set Build Number from Git */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Set Build Number from Git";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Auto-increment CFBundleVersion for archive builds only.\n# Uses the git commit count so the build number is monotonic and reproducible.\n# Writes to the BUILT Info.plist (not the source) to avoid git churn.\nif [ \"$ACTION\" != \"install\" ]; then\n  echo \"Skipping build number bump (ACTION=$ACTION, only runs on archive).\"\n  exit 0\nfi\n\nif ! command -v git >/dev/null 2>&1; then\n  echo \"warning: git not found; leaving CFBundleVersion unchanged.\"\n  exit 0\nfi\n\nBUILD_NUMBER=$(git -C \"$SRCROOT\" rev-list HEAD --count 2>/dev/null)\nif [ -z \"$BUILD_NUMBER\" ]; then\n  echo \"warning: could not read git commit count; leaving CFBundleVersion unchanged.\"\n  exit 0\nfi\n\nINFO_PLIST=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nif [ ! -f \"$INFO_PLIST\" ]; then\n  echo \"warning: built Info.plist not found at $INFO_PLIST\"\n  exit 0\nfi\n\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD_NUMBER\" \"$INFO_PLIST\"\necho \"Set CFBundleVersion to $BUILD_NUMBER\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		E10000000000000000000002 /* Sources */ = {
@@ -476,7 +499,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.textcal.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yjohny.textcal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
@@ -503,7 +526,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.textcal.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yjohny.textcal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
