@@ -32,16 +32,21 @@ actor TemplateStore {
 
     private let fileURL: URL
 
-    init() {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.fileURL = docs.appendingPathComponent("textcal/templates.json")
+    init(baseURL: URL) {
+        self.fileURL = baseURL.appendingPathComponent("textcal/templates.json")
     }
 
     func load() -> [EventTemplate] {
-        guard FileManager.default.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: fileURL) else {
-            return []
+        try? FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var data: Data?
+        coordinator.coordinate(readingItemAt: fileURL, options: [.withoutChanges], error: &coordError) { url in
+            data = try? Data(contentsOf: url)
         }
+        guard let data else { return [] }
         // Try the current versioned envelope first
         if let file = try? JSONDecoder().decode(TemplateFile.self, from: data) {
             return file.templates
@@ -58,6 +63,18 @@ actor TemplateStore {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = TemplateFile(version: Self.currentVersion, templates: templates)
         let data = try JSONEncoder().encode(file)
-        try data.write(to: fileURL, options: .atomic)
+
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var thrownError: Error?
+        coordinator.coordinate(writingItemAt: fileURL, options: [.forReplacing], error: &coordError) { url in
+            do {
+                try data.write(to: url, options: .atomic)
+            } catch {
+                thrownError = error
+            }
+        }
+        if let coordError { throw coordError }
+        if let thrownError { throw thrownError }
     }
 }

@@ -32,11 +32,17 @@ final class CalendarStore {
     }
     var syncStatus: SyncStatus = .idle
 
+    /// True while `CloudWatcher` is receiving updates from iCloud. Runs
+    /// alongside `syncStatus` so the UI can show a cloud indicator even
+    /// when a local save or EventKit sync is also happening.
+    var isCloudSyncing: Bool = false
+
     private(set) var eventKitManager: EventKitManager?
     private var fileStore: FileStore?
     private var coalescer: ChangeCoalescer?
+    private var cloudWatcher: CloudWatcher?
     private(set) var calendarSettings: CalendarSettings?
-    private(set) var templateStore: TemplateStore = TemplateStore()
+    private(set) var templateStore: TemplateStore = TemplateStore(baseURL: FileStore.localBaseURL())
 
     /// Debounce EventKit sync to avoid re-syncing on every keystroke
     private var syncTask: Task<Void, Never>?
@@ -58,11 +64,15 @@ final class CalendarStore {
     init() {}
 
     /// Connect to persistence layers
-    func configure(eventKitManager: EventKitManager, fileStore: FileStore, coalescer: ChangeCoalescer, calendarSettings: CalendarSettings = CalendarSettings()) {
+    func configure(eventKitManager: EventKitManager, fileStore: FileStore, coalescer: ChangeCoalescer, calendarSettings: CalendarSettings = CalendarSettings(), templateStore: TemplateStore? = nil, cloudWatcher: CloudWatcher? = nil) {
         self.eventKitManager = eventKitManager
         self.fileStore = fileStore
         self.coalescer = coalescer
         self.calendarSettings = calendarSettings
+        if let templateStore {
+            self.templateStore = templateStore
+        }
+        self.cloudWatcher = cloudWatcher
 
         // Wire up error reporting from the coalescer
         Task {
@@ -71,6 +81,41 @@ final class CalendarStore {
                     self?.syncStatus = .error(Strings.saveFailed)
                 }
             }
+        }
+
+        // Wire up iCloud change detection. `userHasLocalEdits` in
+        // `DayTextEditor` guards against clobbering in-flight typing.
+        if let cloudWatcher {
+            cloudWatcher.onStatusChange = { [weak self] active in
+                self?.isCloudSyncing = active
+            }
+            cloudWatcher.onChange = { [weak self] dates in
+                guard let self else { return }
+                Task { await self.reloadDatesFromDisk(dates) }
+            }
+        }
+    }
+
+    /// Re-read the given dates from disk into `dayTexts` after `CloudWatcher`
+    /// reports remote changes. The editor's `userHasLocalEdits` guard protects
+    /// any text the user is currently typing from being overwritten. Toggles
+    /// `isCloudSyncing` so the nav bar shows a cloud indicator while the
+    /// reload is in flight.
+    func reloadDatesFromDisk(_ dates: Set<Date>) async {
+        guard let fileStore, !dates.isEmpty else { return }
+        isCloudSyncing = true
+        defer { isCloudSyncing = false }
+        for date in dates {
+            let key = DateFormatting.normalizeToDay(date)
+            guard let text = try? await fileStore.loadJournal(for: key) else { continue }
+            if text.isEmpty {
+                dayTexts.removeValue(forKey: key)
+                journals.removeValue(forKey: key)
+            } else {
+                dayTexts[key] = text
+                journals[key] = text
+            }
+            parsedKeyCache.removeValue(forKey: key)
         }
     }
 

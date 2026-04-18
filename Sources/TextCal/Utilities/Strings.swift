@@ -5,6 +5,7 @@ enum Strings {
     // MARK: - Sync Status
     static let saving = LocalizedStringKey("Saving...")
     static let syncing = LocalizedStringKey("Syncing...")
+    static let cloudSyncing = LocalizedStringKey("iCloud...")
     static let saveFailed = "Save failed"
     static let syncFailed = "Sync failed"
 
@@ -75,4 +76,17 @@ enum Strings {
     static let exportAllData = LocalizedStringKey("Export All Data")
     static let exportFooter = LocalizedStringKey("Export all your journal text as a single document. Share it to Files, Mail, or another app to keep a backup.")
     static let preparingExport = LocalizedStringKey("Preparing export...")
+
+    // MARK: - iCloud Sync
+    static let syncSection = LocalizedStringKey("Sync")
+    static let iCloudSyncToggle = LocalizedStringKey("Sync via iCloud")
+    static let iCloudSyncFooter = LocalizedStringKey("When on, your journal text and templates are stored in iCloud Drive so they appear on all your devices signed into the same Apple ID. Events already sync via your Calendar accounts. Relaunch TextCal after changing this setting.")
+    static let iCloudUnavailableTitle = LocalizedStringKey("iCloud Not Available")
+    static let iCloudUnavailableMessage = LocalizedStringKey("Sign in to iCloud and enable iCloud Drive in Settings, then try again.")
+    static let relaunchRequiredTitle = LocalizedStringKey("Relaunch to Apply")
+    static let relaunchRequiredMessage = LocalizedStringKey("Quit and reopen TextCal to start using the new storage location. Your existing journal will be copied over automatically.")
+    static let bothSidesDataTitle = LocalizedStringKey("Journal Exists on Both Sides")
+    static let bothSidesDataMessage = LocalizedStringKey("Your device and iCloud each have TextCal journal files. Days that exist in only one will be copied across, but for days that exist in both with different text, the version on your chosen storage wins — the other copy stays on disk but won't appear in the app. Consider using Export All Data first.")
+    static let ok = LocalizedStringKey("OK")
+    static let continueAction = LocalizedStringKey("Continue")
 }

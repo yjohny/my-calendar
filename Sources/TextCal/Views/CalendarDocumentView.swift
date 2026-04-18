@@ -215,6 +215,17 @@ struct CalendarDocumentView: View {
                         }
                         .transition(.opacity)
                         .accessibilityLabel(store.syncStatus == .saving ? "Saving changes" : "Syncing with calendar")
+                    } else if store.isCloudSyncing {
+                        HStack(spacing: 6) {
+                            Image(systemName: "icloud.and.arrow.down")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(Strings.cloudSyncing)
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundStyle(.secondary)
+                        }
+                        .transition(.opacity)
+                        .accessibilityLabel("Receiving changes from iCloud")
                     }
                 }
             }

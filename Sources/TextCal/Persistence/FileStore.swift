@@ -32,12 +32,82 @@ actor FileStore {
         return f
     }()
 
-    init() {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.rootDir = docs.appendingPathComponent("textcal", isDirectory: true)
+    init(baseURL: URL) {
+        self.rootDir = baseURL.appendingPathComponent("textcal", isDirectory: true)
         self.journalDir = rootDir.appendingPathComponent("journal", isDirectory: true)
-        self.legacyFileURL = docs.appendingPathComponent("calendar.md")
+        self.legacyFileURL = baseURL.appendingPathComponent("calendar.md")
         self.schemaFileURL = rootDir.appendingPathComponent("schema.json")
+    }
+
+    /// Local Documents directory. Always available.
+    static func localBaseURL() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    }
+
+    /// iCloud Drive base URL for the app's ubiquity container, or nil if
+    /// the user is not signed into iCloud or the container isn't provisioned.
+    /// This call can block briefly on first use; call off the main thread.
+    static func cloudBaseURL() -> URL? {
+        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
+            return nil
+        }
+        return container.appendingPathComponent("Documents", isDirectory: true)
+    }
+
+    /// Per-file union copy of the `textcal/` tree from `source` into
+    /// `destination`. For each file in source, if no file with the same
+    /// relative path exists at destination, copy it over; otherwise leave
+    /// the destination file untouched. Returns the number of files copied.
+    ///
+    /// This is a union, not a merge: days or templates present on only
+    /// one side get propagated, but days present on both sides with
+    /// different content stay as-is on the destination. Callers that need
+    /// to warn the user about divergent content should check `hasAnyData`
+    /// on both bases before invoking this.
+    @discardableResult
+    static func migrateTextCalTree(from source: URL, to destination: URL) throws -> Int {
+        let fm = FileManager.default
+        let sourceRoot = source.appendingPathComponent("textcal", isDirectory: true)
+        guard fm.fileExists(atPath: sourceRoot.path) else { return 0 }
+
+        let destRoot = destination.appendingPathComponent("textcal", isDirectory: true)
+        try fm.createDirectory(at: destRoot, withIntermediateDirectories: true)
+
+        var copied = 0
+        let keys: Set<URLResourceKey> = [.isDirectoryKey]
+        guard let enumerator = fm.enumerator(at: sourceRoot, includingPropertiesForKeys: Array(keys)) else {
+            return 0
+        }
+        let sourcePrefix = sourceRoot.path
+        for case let fileURL as URL in enumerator {
+            let isDir = (try? fileURL.resourceValues(forKeys: keys))?.isDirectory ?? false
+            var relative = String(fileURL.path.dropFirst(sourcePrefix.count))
+            while relative.hasPrefix("/") { relative.removeFirst() }
+            guard !relative.isEmpty else { continue }
+            let destURL = destRoot.appendingPathComponent(relative)
+            if isDir {
+                try? fm.createDirectory(at: destURL, withIntermediateDirectories: true)
+            } else if !fm.fileExists(atPath: destURL.path) {
+                try fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(at: fileURL, to: destURL)
+                copied += 1
+            }
+        }
+        return copied
+    }
+
+    /// True when the given base URL has any journal files or a templates.json
+    /// under `textcal/`. Used to warn the user when both local and cloud
+    /// bases have data — a union migration won't overwrite anything, but the
+    /// user still loses visibility into whichever side's versions lose out
+    /// for days that exist in both places.
+    static func hasAnyData(at baseURL: URL) -> Bool {
+        let fm = FileManager.default
+        let journal = baseURL.appendingPathComponent("textcal/journal", isDirectory: true)
+        let files = (try? fm.contentsOfDirectory(at: journal, includingPropertiesForKeys: nil)) ?? []
+        if files.contains(where: { $0.pathExtension == "txt" }) { return true }
+        let templates = baseURL.appendingPathComponent("textcal/templates.json")
+        return fm.fileExists(atPath: templates.path)
     }
 
     /// Ensure the journal directory exists
@@ -82,32 +152,131 @@ actor FileStore {
         try? data.write(to: schemaFileURL, options: .atomic)
     }
 
-    /// Load journal text for a specific date
+    /// Load journal text for a specific date via a coordinated read so
+    /// concurrent writes (e.g., iCloud syncing the file in from another
+    /// device) don't race with us. If unresolved `NSFileVersion` conflict
+    /// versions exist, they're merged inline first under a coordinated
+    /// write so the user sees both sides of the conflict in the text.
     func loadJournal(for date: Date) async throws -> String {
         let url = fileURL(for: date)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            return ""
-        }
-        return try String(contentsOf: url, encoding: .utf8)
+        // Pull the file down from iCloud if it's only a placeholder. Safe
+        // no-op when the file lives locally.
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+
+        // Merge any pending iCloud conflicts before reading so we return a
+        // single coherent string. Separate step because conflict resolution
+        // requires writing access — you can't mix read and write options
+        // inside one `coordinate(readingItemAt:...)` block.
+        try Self.mergeConflictsIfAny(at: url)
+
+        return try Self.coordinatedRead(at: url)
     }
 
-    /// Save journal text for a specific date
+    /// Coordinated read of `url` via `NSFileCoordinator`. Returns "" when
+    /// the file doesn't exist. Coordination blocks until the file system
+    /// daemon grants exclusive read access — prevents iCloud sync from
+    /// shoving a half-written file at us mid-read.
+    private static func coordinatedRead(at url: URL) throws -> String {
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var result: String = ""
+        var thrownError: Error?
+        coordinator.coordinate(readingItemAt: url, options: [.withoutChanges], error: &coordError) { coordinatedURL in
+            guard FileManager.default.fileExists(atPath: coordinatedURL.path) else { return }
+            do {
+                result = try String(contentsOf: coordinatedURL, encoding: .utf8)
+            } catch {
+                thrownError = error
+            }
+        }
+        if let coordError { throw coordError }
+        if let thrownError { throw thrownError }
+        return result
+    }
+
+    /// If `NSFileVersion.unresolvedConflictVersionsOfItem` reports conflicts
+    /// for `url`, merge their contents inline under a visible separator via
+    /// a coordinated write. No-op when there are no conflicts (common case,
+    /// returns immediately without acquiring coordination).
+    private static func mergeConflictsIfAny(at url: URL) throws {
+        guard let conflicts = NSFileVersion.unresolvedConflictVersionsOfItem(at: url),
+              !conflicts.isEmpty else { return }
+
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var thrownError: Error?
+        coordinator.coordinate(writingItemAt: url, options: [.forReplacing], error: &coordError) { coordinatedURL in
+            do {
+                let current = (try? String(contentsOf: coordinatedURL, encoding: .utf8)) ?? ""
+                var merged = current
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+
+                for version in conflicts {
+                    let content = (try? String(contentsOf: version.url, encoding: .utf8)) ?? ""
+                    let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmedContent.isEmpty || content == current {
+                        version.isResolved = true
+                        continue
+                    }
+                    let device = version.localizedNameOfSavingComputer ?? "another device"
+                    let when = version.modificationDate.map { formatter.string(from: $0) } ?? ""
+                    let header = "\n\n--- conflict from \(device) at \(when) ---\n\n"
+                    merged += header + content
+                    version.isResolved = true
+                }
+
+                if merged != current {
+                    try merged.write(to: coordinatedURL, atomically: true, encoding: .utf8)
+                }
+                try? NSFileVersion.removeOtherVersionsOfItem(at: coordinatedURL)
+            } catch {
+                thrownError = error
+            }
+        }
+        if let coordError { throw coordError }
+        if let thrownError { throw thrownError }
+    }
+
+    /// Save journal text for `date` under a coordinated write so other
+    /// readers (iCloud daemon, another device syncing in) see a complete
+    /// file rather than a half-flushed one.
     func saveJournal(_ text: String, for date: Date) async throws {
         try ensureDirectory()
         let url = fileURL(for: date)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var thrownError: Error?
         if trimmed.isEmpty {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
+            coordinator.coordinate(writingItemAt: url, options: [.forDeleting], error: &coordError) { coordinatedURL in
+                if FileManager.default.fileExists(atPath: coordinatedURL.path) {
+                    do {
+                        try FileManager.default.removeItem(at: coordinatedURL)
+                    } catch {
+                        thrownError = error
+                    }
+                }
             }
         } else {
-            // Write the original text (preserving user's trailing newlines within content)
-            // but ensure we don't write purely whitespace files
-            try text.trimmingCharacters(in: .newlines).write(to: url, atomically: true, encoding: .utf8)
+            let toWrite = text.trimmingCharacters(in: .newlines)
+            coordinator.coordinate(writingItemAt: url, options: [.forReplacing], error: &coordError) { coordinatedURL in
+                do {
+                    try toWrite.write(to: coordinatedURL, atomically: true, encoding: .utf8)
+                } catch {
+                    thrownError = error
+                }
+            }
         }
+        if let coordError { throw coordError }
+        if let thrownError { throw thrownError }
     }
 
-    /// Load all journal entries (for initial load)
+    /// Load all journal entries for initial load. Uses a single batched
+    /// coordination via `prepare(forReadingItemsAt:...)` so the file system
+    /// daemon grants access to all day files in one round-trip — faster
+    /// than coordinating each file individually on iCloud-backed stores.
     func loadAllJournals() async throws -> [Date: String] {
         try ensureDirectory()
         var results: [Date: String] = [:]
@@ -116,17 +285,23 @@ actor FileStore {
         guard let files = try? fm.contentsOfDirectory(at: journalDir, includingPropertiesForKeys: nil) else {
             return results
         }
+        let txtFiles = files.filter { $0.pathExtension == "txt" }
+        guard !txtFiles.isEmpty else { return results }
 
-        for file in files where file.pathExtension == "txt" {
-            let name = file.deletingPathExtension().lastPathComponent
-            if let date = Self.dateFormatter.date(from: name) {
-                let content = try String(contentsOf: file, encoding: .utf8)
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        coordinator.prepare(forReadingItemsAt: txtFiles, options: [.withoutChanges], writingItemsAt: [], options: [], error: &coordError) { completionHandler in
+            defer { completionHandler() }
+            for file in txtFiles {
+                let name = file.deletingPathExtension().lastPathComponent
+                guard let date = Self.dateFormatter.date(from: name) else { continue }
+                guard let content = try? String(contentsOf: file, encoding: .utf8) else { continue }
                 if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     results[DateFormatting.normalizeToDay(date)] = content
                 }
             }
         }
-
+        if let coordError { throw coordError }
         return results
     }
 

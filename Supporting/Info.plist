@@ -24,6 +24,18 @@
 	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>TextCal syncs your events with the Calendar app so they appear on all your devices.</string>
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>iCloud.com.yjohny.textcal</key>
+		<dict>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
+			<true/>
+			<key>NSUbiquitousContainerName</key>
+			<string>TextCal</string>
+			<key>NSUbiquitousContainerSupportedFolderLevels</key>
+			<string>Any</string>
+		</dict>
+	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>
